@@ -20,7 +20,7 @@ services:
     build: ./dashboard
     container_name: openshorts-frontend
     ports:
-      - "8080:5173"
+      - "80:80"
     volumes:
       - ./dashboard:/app
       - /app/node_modules
