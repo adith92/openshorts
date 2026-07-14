@@ -8,6 +8,12 @@ services:
       - .:/app
       - /app/__pycache__
       - ./output:/app/output
+      - gemini-cli-data:/app/.gemini
+    environment:
+      - HOME=/app
+      - GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true
+      - NO_BROWSER=true
+      - GEMINI_CLI_WORKING_DIR=/tmp/openshorts-gemini-cli
     restart: unless-stopped
 
   frontend:
@@ -38,3 +44,6 @@ services:
     restart: unless-stopped
     depends_on:
       - backend
+
+volumes:
+  gemini-cli-data:
