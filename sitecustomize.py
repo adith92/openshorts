@@ -16,7 +16,7 @@ try:
         if custom_config is not None:
             print(
                 "[CustomAI] OpenAI-compatible provider enabled "
-                f"(endpoint={custom_config.base_url}, model={custom_config.model})"
+                f"(endpoint={custom_config.safe_endpoint_label}, model={custom_config.model})"
             )
             return OpenAICompatibleClient(custom_config)
 
