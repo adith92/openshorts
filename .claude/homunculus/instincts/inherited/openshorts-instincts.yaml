@@ -1,0 +1,465 @@
+# Instincts generated from https://github.com/adith92/openshorts
+# Generated: 2026-07-14T03:14:16.953Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: openshorts-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: feat, test, fix, docs
+
+## Evidence
+
+- 8 commits analyzed
+- Detected conventional commit pattern
+- Examples: feat: add OpenAI-compatible AI client, test: cover custom AI config and response compatibility
+
+---
+id: openshorts-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Commit Length
+
+## Action
+
+Keep commit messages concise (~45 characters)
+
+## Evidence
+
+- Average commit message length: 45 chars
+- Based on 8 commits
+
+---
+id: openshorts-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: openshorts-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: openshorts-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: openshorts-arch-type-based
+trigger: "when adding new code"
+confidence: 0.8
+domain: architecture
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Arch Type Based
+
+## Action
+
+Place code in the appropriate type folder (components/, services/, utils/, etc.)
+
+## Evidence
+
+- Type-based module organization detected
+- Folders: 
+
+---
+id: openshorts-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: openshorts-workflow-feature-development-with-tests-and-docs
+trigger: "when doing feature development with tests and docs"
+confidence: 0.55
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Workflow Feature Development With Tests And Docs
+
+## Action
+
+Follow the feature-development-with-tests-and-docs workflow:
+1. Implement core logic in backend (e.g., custom_ai_client.py, sitecustomize.py)
+2. Add or update frontend configuration components (e.g., dashboard/src/components/KeyInput.jsx)
+3. Write or update tests for new feature (e.g., tests/test_custom_ai_client.py)
+4. Document the feature and its setup (e.g., CUSTOM_AI_ENDPOINT.md)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~1x per month
+- Files: custom_ai_client.py, sitecustomize.py, dashboard/src/components/KeyInput.jsx
+
+---
+id: openshorts-workflow-feature-hardening-with-tests
+trigger: "when doing feature hardening with tests"
+confidence: 0.6
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Workflow Feature Hardening With Tests
+
+## Action
+
+Follow the feature-hardening-with-tests workflow:
+1. Apply fixes or improvements in backend files (e.g., custom_ai_client.py, sitecustomize.py)
+2. Update or add tests to cover new or changed behavior (e.g., tests/test_custom_ai_client.py)
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~2x per month
+- Files: custom_ai_client.py, sitecustomize.py, tests/test_custom_ai_client.py
+
+---
+id: openshorts-instinct-file-naming
+trigger: "When creating or renaming a Python file"
+confidence: 0.9
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct File Naming
+
+## Action
+
+Use snake_case for file names
+
+## Evidence
+
+- Pattern in files: custom_ai_client.py, sitecustomize.py
+
+---
+id: openshorts-instinct-function-naming
+trigger: "When defining a function"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in codebase: function naming conventions
+
+---
+id: openshorts-instinct-class-naming
+trigger: "When defining a class"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in codebase: class naming conventions
+
+---
+id: openshorts-instinct-constant-naming
+trigger: "When defining a constant"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in codebase: constant naming conventions
+
+---
+id: openshorts-instinct-import-style
+trigger: "When importing modules in Python"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Import Style
+
+## Action
+
+Use relative imports
+
+## Evidence
+
+- Pattern in codebase: relative import statements
+
+---
+id: openshorts-instinct-export-style
+trigger: "When exporting symbols from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in codebase: named exports
+
+---
+id: openshorts-instinct-test-location
+trigger: "When adding or updating tests"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Test Location
+
+## Action
+
+Place tests in the separate 'tests' folder
+
+## Evidence
+
+- Pattern in folder structure: tests/test_custom_ai_client.py
+
+---
+id: openshorts-instinct-test-coverage
+trigger: "When implementing or modifying a feature"
+confidence: 0.95
+domain: testing
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Test Coverage
+
+## Action
+
+Write or update tests to cover new or changed behavior
+
+## Evidence
+
+- Seen in: test: cover custom AI config and response compatibility
+- Pattern: tests/test_custom_ai_client.py updated with feature changes
+
+---
+id: openshorts-instinct-test-naming
+trigger: "When naming test files"
+confidence: 0.9
+domain: testing
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Test Naming
+
+## Action
+
+Use test_ prefix for test files (e.g., test_custom_ai_client.py)
+
+## Evidence
+
+- Pattern in files: tests/test_custom_ai_client.py
+
+---
+id: openshorts-instinct-commit-format
+trigger: "When writing a commit message"
+confidence: 0.95
+domain: git
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Commit Format
+
+## Action
+
+Use the conventional commit format: <type>: <short description>
+
+## Evidence
+
+- Seen in commits: feat: add OpenAI-compatible AI client
+- fix: harden custom endpoint compatibility and logging
+
+---
+id: openshorts-instinct-commit-type-prefixes
+trigger: "When choosing a commit type"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Commit Type Prefixes
+
+## Action
+
+Use one of: feat, fix, test, docs as the prefix
+
+## Evidence
+
+- Pattern in commits: feat, fix, test, docs
+
+---
+id: openshorts-instinct-commit-length
+trigger: "When writing a commit message"
+confidence: 0.7
+domain: git
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Commit Length
+
+## Action
+
+Keep the commit message around 45 characters on average
+
+## Evidence
+
+- Pattern: average commit message length is 45
+
+---
+id: openshorts-instinct-feature-development-workflow
+trigger: "When adding a new major feature or integration"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Feature Development Workflow
+
+## Action
+
+Implement backend logic, update frontend config, write tests, and document the feature
+
+## Evidence
+
+- Workflow: feature-development-with-tests-and-docs
+- Example commits and files: custom_ai_client.py, dashboard/src/components/KeyInput.jsx, tests/test_custom_ai_client.py, CUSTOM_AI_ENDPOINT.md
+
+---
+id: openshorts-instinct-feature-hardening-workflow
+trigger: "When fixing or improving an existing feature"
+confidence: 0.9
+domain: workflow
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Feature Hardening Workflow
+
+## Action
+
+Apply fixes/improvements in backend and update/add tests for the changes
+
+## Evidence
+
+- Workflow: feature-hardening-with-tests
+- Example commits and files: custom_ai_client.py, tests/test_custom_ai_client.py
+
