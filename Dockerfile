@@ -24,7 +24,7 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install FFmpeg and OpenCV runtime dependencies.
+# Install FFmpeg, OpenCV, and Node.js runtime dependencies.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1 \
@@ -32,6 +32,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
+    libstdc++6 \
+    libgcc-s1 \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
