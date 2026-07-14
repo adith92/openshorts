@@ -34,6 +34,11 @@ class CustomAIConfig:
             return base
         return f"{base}/chat/completions"
 
+    @property
+    def safe_endpoint_label(self) -> str:
+        parsed = urlparse(self.base_url)
+        return f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip("/")
+
 
 def _decode_embedded_config(value: str) -> dict[str, Any] | None:
     if not value or not value.startswith(CONFIG_PREFIX):
@@ -56,6 +61,10 @@ def _validate_base_url(value: str) -> str:
     parsed = urlparse(base_url)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise CustomAIError("Custom AI Base URL must be a valid http:// or https:// URL.")
+    if parsed.username or parsed.password:
+        raise CustomAIError("Put credentials in the API key field, not in the Base URL.")
+    if parsed.query or parsed.fragment:
+        raise CustomAIError("Custom AI Base URL must not contain a query string or fragment.")
     if "\n" in base_url or "\r" in base_url:
         raise CustomAIError("Custom AI Base URL contains invalid characters.")
     return base_url
@@ -100,7 +109,12 @@ def resolve_custom_ai_config(api_key_argument: str | None) -> CustomAIConfig | N
         model = os.getenv("AI_MODEL", "").strip()
         temperature = _number(os.getenv("AI_TEMPERATURE"), 0.2, 0.0, 2.0)
         timeout_seconds = _number(os.getenv("AI_TIMEOUT_SECONDS"), 180.0, 10.0, 900.0)
-        max_tokens = _integer(os.getenv("AI_MAX_TOKENS"), 4096, 256, 32768)
+        max_tokens = _integer(
+            os.getenv("AI_MAX_TOKENS") or os.getenv("AI_MAX_OUTPUT_TOKENS"),
+            4096,
+            256,
+            32768,
+        )
 
     if not raw_key:
         raise CustomAIError("Custom AI API key is missing.")
@@ -172,7 +186,7 @@ class _CustomModelsAPI:
 
 
 class OpenAICompatibleClient:
-    """Compatibility shim for the subset of google-genai used by OpenShorts."""
+    """Small compatibility shim for the subset of google-genai used by OpenShorts."""
 
     def __init__(self, config: CustomAIConfig, transport: httpx.BaseTransport | None = None) -> None:
         self.config = config
@@ -214,9 +228,25 @@ class OpenAICompatibleClient:
         try:
             with httpx.Client(timeout=timeout, transport=self._transport) as client:
                 response = client.post(self.config.chat_completions_url, headers=headers, json=payload)
+
+                # Routers vary in which OpenAI parameters they accept. Retry only for
+                # payload compatibility errors, never for authentication/rate limits.
                 if response.status_code == 400 and "response_format" in payload:
                     payload.pop("response_format", None)
                     response = client.post(self.config.chat_completions_url, headers=headers, json=payload)
+
+                if response.status_code == 400 and "max_tokens" in payload:
+                    error_text = response.text.lower()
+                    if "max_tokens" in error_text or "unsupported" in error_text:
+                        payload["max_completion_tokens"] = payload.pop("max_tokens")
+                        response = client.post(self.config.chat_completions_url, headers=headers, json=payload)
+
+                if response.status_code == 400 and "temperature" in payload:
+                    error_text = response.text.lower()
+                    if "temperature" in error_text or "unsupported" in error_text:
+                        payload.pop("temperature", None)
+                        response = client.post(self.config.chat_completions_url, headers=headers, json=payload)
+
                 response.raise_for_status()
                 data = response.json()
         except httpx.TimeoutException as exc:
@@ -236,9 +266,9 @@ class OpenAICompatibleClient:
             raise CustomAIError("Custom AI endpoint response is missing choices[0].message.content.") from exc
 
         usage = data.get("usage") or {}
-        usage_metadata = None
+        custom_usage_metadata = None
         if isinstance(usage, dict) and usage:
-            usage_metadata = SimpleNamespace(
+            custom_usage_metadata = SimpleNamespace(
                 prompt_token_count=int(usage.get("prompt_tokens") or 0),
                 candidates_token_count=int(usage.get("completion_tokens") or 0),
                 total_token_count=int(usage.get("total_tokens") or 0),
@@ -246,6 +276,9 @@ class OpenAICompatibleClient:
 
         return SimpleNamespace(
             text=text,
-            usage_metadata=usage_metadata,
+            # main.py currently applies hard-coded Gemini pricing whenever this field
+            # is present. Keep it None so custom-router usage is not mislabeled/costed.
+            usage_metadata=None,
+            custom_usage_metadata=custom_usage_metadata,
             model_version=data.get("model", selected_model),
         )
