@@ -37,6 +37,7 @@ class CustomAIConfigTests(unittest.TestCase):
             config.chat_completions_url,
             "http://omniroute:20128/v1/chat/completions",
         )
+        self.assertEqual(config.safe_endpoint_label, "http://omniroute:20128/v1")
 
     def test_accepts_full_chat_completions_url(self):
         config = resolve_custom_ai_config(
@@ -54,6 +55,12 @@ class CustomAIConfigTests(unittest.TestCase):
     def test_rejects_invalid_scheme(self):
         with self.assertRaises(CustomAIError):
             resolve_custom_ai_config(encoded_config(baseUrl="file:///etc/passwd"))
+
+    def test_rejects_credentials_in_url(self):
+        with self.assertRaises(CustomAIError):
+            resolve_custom_ai_config(
+                encoded_config(baseUrl="http://user:password@router.example/v1")
+            )
 
 
 class OpenAICompatibleClientTests(unittest.TestCase):
@@ -84,8 +91,9 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         )
 
         self.assertEqual(response.text, '{"shorts": []}')
-        self.assertEqual(response.usage_metadata.prompt_token_count, 10)
-        self.assertEqual(response.usage_metadata.candidates_token_count, 2)
+        self.assertIsNone(response.usage_metadata)
+        self.assertEqual(response.custom_usage_metadata.prompt_token_count, 10)
+        self.assertEqual(response.custom_usage_metadata.candidates_token_count, 2)
 
     def test_retries_without_response_format_on_400(self):
         config = resolve_custom_ai_config(encoded_config())
@@ -107,6 +115,27 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         self.assertEqual(response.text, '{"shorts": []}')
         self.assertIn("response_format", calls[0])
         self.assertNotIn("response_format", calls[1])
+
+    def test_falls_back_to_max_completion_tokens(self):
+        config = resolve_custom_ai_config(encoded_config())
+        calls = []
+
+        def handler(request):
+            body = json.loads(request.content.decode("utf-8"))
+            calls.append(body)
+            if "max_tokens" in body:
+                return httpx.Response(400, json={"error": "max_tokens is unsupported"})
+            return httpx.Response(
+                200,
+                json={"choices": [{"message": {"content": "done"}}]},
+            )
+
+        client = OpenAICompatibleClient(config, transport=httpx.MockTransport(handler))
+        response = client.models.generate_content(contents="plain text request")
+
+        self.assertEqual(response.text, "done")
+        self.assertIn("max_tokens", calls[0])
+        self.assertIn("max_completion_tokens", calls[1])
 
 
 if __name__ == "__main__":
