@@ -9,8 +9,10 @@ class CustomEndpointMigrationTests(unittest.TestCase):
     def test_active_source_has_no_gemini_cli_runtime(self):
         excluded_directories = {".git", "node_modules", "dist", ".deploy"}
         excluded_files = {
+            # These tests intentionally name the files and settings that must stay
+            # removed, so they are not active runtime references.
             "test_custom_endpoint_migration.py",
-            "MIGRATION_CUSTOM_ENDPOINT.md",
+            "test_native_aws_deployment.py",
         }
         stale_markers = (
             "gemini_cli_oauth_client",
