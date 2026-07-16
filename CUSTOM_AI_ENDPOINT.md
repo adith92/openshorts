@@ -1,65 +1,123 @@
 # Custom AI Endpoint for OpenShorts
 
-OpenShorts supports OpenAI-compatible endpoints for transcript-based clip analysis while preserving the regular Google Gemini provider.
+OpenShorts supports OpenAI-compatible endpoints for transcript-based clip analysis while preserving the regular Google Gemini API-key provider as a direct fallback.
 
 Supported gateway examples include:
 
-- 9Router
-- OmniRoute
 - LiteLLM
 - OpenRouter-compatible gateways
-- internal services exposing `POST /chat/completions`
+- OmniRoute or similar routers
+- internal services exposing `GET /models` and `POST /chat/completions`
+
+## Required endpoint contract
+
+Given a Base URL such as:
+
+```text
+https://router.example.com/v1
+```
+
+OpenShorts uses:
+
+```text
+GET  https://router.example.com/v1/models
+POST https://router.example.com/v1/chat/completions
+```
+
+The same API key is sent as:
+
+```http
+Authorization: Bearer ENDPOINT_API_KEY
+```
+
+The model ID selected from the `/models` response is sent unchanged in the `model` field of the chat completion request.
 
 ## Configure from the UI
 
 1. Open **Settings**.
-2. Under **AI Provider**, select **OpenAI Compatible / Custom Endpoint**.
-3. Enter a Base URL reachable from the OpenShorts backend host.
-4. Enter the model or routing alias.
-5. Enter the gateway API key.
-6. Save the AI settings.
-7. Start a Clip Generator job.
+2. Select **Custom Endpoint + API Key**.
+3. Enter the Base URL.
+4. Enter the endpoint API key.
+5. Wait for automatic model discovery, or click **Refresh Models**.
+6. Choose one of the discovered Gemini models.
+7. Save the endpoint.
+8. Start a Clip Generator job.
 
-Examples:
+Model discovery begins automatically about 700 milliseconds after both the Base URL and API key are present.
+
+The model selector prioritizes IDs containing `gemini`. When the endpoint returns Gemini and non-Gemini models, the UI shows Gemini models by default and provides an option to display the complete list.
+
+Examples of supported model payloads:
+
+```json
+{
+  "data": [
+    {"id": "google/gemini-2.5-flash"},
+    {"id": "google/gemini-2.5-pro"}
+  ]
+}
+```
+
+```json
+{
+  "models": [
+    {"name": "models/gemini-2.5-flash"}
+  ]
+}
+```
+
+OpenShorts also accepts arrays of model strings and common nested `result.data` or `result.models` responses.
+
+## CORS requirement for automatic discovery
+
+The dashboard fetches the models list directly from the configured endpoint so the list can update immediately while the user edits Settings.
+
+External endpoints must allow browser requests from the OpenShorts origin and permit these headers:
 
 ```text
-http://127.0.0.1:20128/v1
+Authorization
+Accept
+```
+
+When the endpoint blocks CORS, automatic discovery shows an error and the UI keeps a manual model-ID fallback. Generation can still work through the FastAPI backend after a valid model ID is entered manually.
+
+For a private router on the same VPS, the cleanest production setup is to expose a protected same-origin path through Nginx rather than opening the router directly to the internet.
+
+## Base URL normalization
+
+OpenShorts accepts any of these forms:
+
+```text
 https://router.example.com/v1
+https://router.example.com/v1/models
+https://router.example.com/v1/chat/completions
 ```
 
-OpenShorts appends `/chat/completions` unless the Base URL already ends with that path.
+They normalize to the same API root and produce the corresponding `/models` and `/chat/completions` URLs.
 
-## Native host networking
+The Base URL must:
 
-The endpoint is called by the FastAPI backend process, not by the browser.
+- use HTTP or HTTPS;
+- not contain embedded username/password credentials;
+- not contain a query string or fragment.
 
-When the gateway runs on the same AWS instance, bind it to localhost and use:
+Use HTTPS for external routers.
 
-```text
-http://127.0.0.1:20128/v1
-```
+## Server environment fallback
 
-When the gateway runs on another private host, use its private DNS name or private IP and restrict access with security groups.
-
-When the gateway is external, require HTTPS and a valid certificate.
-
-Do not expose an unauthenticated gateway directly to the public internet.
-
-## Environment configuration
-
-The UI is the preferred configuration path. The compatibility layer can also read server variables:
+The UI is the preferred configuration path. The Python compatibility layer can also read protected server variables:
 
 ```env
 AI_PROVIDER=openai_compatible
-AI_BASE_URL=http://127.0.0.1:20128/v1
+AI_BASE_URL=https://router.example.com/v1
 AI_API_KEY=replace_me
-AI_MODEL=auto
+AI_MODEL=google/gemini-2.5-flash
 AI_TEMPERATURE=0.2
 AI_TIMEOUT_SECONDS=180
 AI_MAX_TOKENS=4096
 ```
 
-Store server-side secrets in a protected environment file such as:
+Store server-side secrets in:
 
 ```text
 /etc/openshorts/openshorts.env
@@ -76,20 +134,28 @@ Never commit the real key.
 
 ## Supported scope
 
-The custom endpoint supports text-based generation, including transcript-based viral moment selection.
+The custom endpoint supports text-based generation, including:
+
+- transcript viral-moment selection;
+- timestamps;
+- hooks;
+- titles;
+- descriptions.
 
 The following Gemini-specific operations are not translated to the OpenAI-compatible API:
 
-- Gemini Files API uploads
-- direct video upload to Gemini
-- Gemini-specific grounding or tools
+- Gemini Files API uploads;
+- direct video upload to Gemini;
+- Gemini-specific grounding or tools.
 
-Use the regular Gemini provider for those operations.
+Use the direct Gemini API-key provider for those operations.
 
 ## Request flow
 
 ```text
 Settings
+  -> GET endpoint /models with endpoint API key
+  -> user selects a Gemini model ID
   -> encoded per-request AI configuration
   -> X-Gemini-Key compatibility request path
   -> FastAPI subprocess environment
@@ -97,49 +163,57 @@ Settings
   -> OpenAI-compatible /chat/completions
 ```
 
-Regular Gemini API keys continue to use the original Google client.
+The `X-Gemini-Key` header name remains for backward compatibility. For custom endpoints, its value is an encoded AI configuration rather than a raw Gemini key.
 
 ## Test connectivity on the AWS host
 
-Run the test as the same Linux user as the backend service:
+Run the test as the same Linux user as the backend service without printing the key:
 
 ```bash
 sudo -u openshorts -H bash -lc '
-  cd /opt/openshorts
-  . .venv/bin/activate
-  python - <<"PY"
-import httpx
-url = "http://127.0.0.1:20128/v1/models"
-response = httpx.get(url, timeout=10)
-print(response.status_code)
-PY
+  set -a
+  . /etc/openshorts/openshorts.env
+  set +a
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer ${AI_API_KEY}" \
+    --header "Accept: application/json" \
+    "${AI_BASE_URL%/}/models" \
+    | python3 -m json.tool \
+    | head -80
 '
 ```
 
 ## Tests
 
 ```bash
-python -m unittest tests/test_custom_ai_client.py -v
+python -m unittest \
+  tests/test_custom_ai_client.py \
+  tests/test_native_aws_deployment.py \
+  -v
 ```
 
 ## Troubleshooting
 
+### Browser reports a CORS error
+
+Allow the OpenShorts web origin on the custom endpoint, or enter a known model ID manually. Do not use a browser extension that disables web security in production.
+
 ### Connection refused
 
-Verify that the gateway is running, listening on the expected interface, and reachable from the backend service user.
-
-```bash
-sudo ss -lntp | grep 20128 || true
-```
+Verify that the gateway is running and reachable from both the user's browser for model discovery and the backend host for generation.
 
 ### 401 or 403
 
-The gateway rejected the API key or access policy. Verify the configured key and gateway permissions without printing the secret.
+The endpoint rejected the API key or access policy. Verify the key without printing it to logs.
 
-### 404
+### 404 on model discovery
 
-Use the gateway's OpenAI-compatible base path, usually ending in `/v1`.
+Confirm that the Base URL points to the OpenAI-compatible API root. OpenShorts appends `/models` automatically.
+
+### No Gemini models shown
+
+Use **Show all endpoint models** to inspect the complete response. Some routers use aliases that do not contain the word `gemini`.
 
 ### Unsupported `response_format`
 
-The client retries once without `response_format` when a gateway returns HTTP 400 for that option.
+The generation client retries once without `response_format` when a gateway returns HTTP 400 for that option.
