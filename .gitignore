@@ -36,7 +36,7 @@ output/
 .deploy/
 reports/
 
-# Gemini CLI credentials and local auth state
+# Local tool credentials and auth state
 .gemini/
 
 # OS and IDE
