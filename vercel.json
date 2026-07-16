@@ -7,27 +7,27 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://www.openshorts.app/api/:path*"
+      "destination": "https://api.openshorts.app/api/:path*"
     },
     {
       "source": "/videos/:path*",
-      "destination": "https://www.openshorts.app/videos/:path*"
+      "destination": "https://api.openshorts.app/videos/:path*"
     },
     {
       "source": "/thumbnails/:path*",
-      "destination": "https://www.openshorts.app/thumbnails/:path*"
+      "destination": "https://api.openshorts.app/thumbnails/:path*"
     },
     {
       "source": "/gallery/:path*",
-      "destination": "https://www.openshorts.app/gallery/:path*"
+      "destination": "https://api.openshorts.app/gallery/:path*"
     },
     {
       "source": "/video/:path*",
-      "destination": "https://www.openshorts.app/video/:path*"
+      "destination": "https://api.openshorts.app/video/:path*"
     },
     {
       "source": "/render/:path*",
-      "destination": "https://www.openshorts.app/render/:path*"
+      "destination": "https://api.openshorts.app/render/:path*"
     },
     {
       "source": "/(.*)",
