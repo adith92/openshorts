@@ -10,6 +10,11 @@ from types import SimpleNamespace
 from typing import Any
 
 CONFIG_PREFIX = "OPENSHORTS_AI_V1:"
+DEFAULT_WORKING_DIRECTORY = os.getenv(
+    "GEMINI_CLI_WORKING_DIR",
+    "/var/lib/openshorts/tmp/gemini-cli",
+).strip() or "/var/lib/openshorts/tmp/gemini-cli"
+
 _GEMINI_CLI_PROVIDERS = {
     "gemini_cli_oauth",
     "gemini-cli-oauth",
@@ -27,7 +32,7 @@ class GeminiCliOAuthConfig:
     model: str = "auto"
     timeout_seconds: float = 180.0
     binary: str = "gemini"
-    working_directory: str = "/tmp/openshorts-gemini-cli"
+    working_directory: str = DEFAULT_WORKING_DIRECTORY
 
     @property
     def safe_endpoint_label(self) -> str:
@@ -83,9 +88,9 @@ def resolve_gemini_cli_oauth_config(
             working_directory=(
                 str(
                     embedded.get("workingDirectory")
-                    or "/tmp/openshorts-gemini-cli"
+                    or DEFAULT_WORKING_DIRECTORY
                 ).strip()
-                or "/tmp/openshorts-gemini-cli"
+                or DEFAULT_WORKING_DIRECTORY
             ),
         )
 
@@ -101,9 +106,9 @@ def resolve_gemini_cli_oauth_config(
         binary=(os.getenv("GEMINI_CLI_BINARY") or "gemini").strip() or "gemini",
         working_directory=(
             os.getenv("GEMINI_CLI_WORKING_DIR")
-            or "/tmp/openshorts-gemini-cli"
+            or DEFAULT_WORKING_DIRECTORY
         ).strip()
-        or "/tmp/openshorts-gemini-cli",
+        or DEFAULT_WORKING_DIRECTORY,
     )
 
 
@@ -203,8 +208,8 @@ class GeminiCliOAuthClient:
         binary = shutil.which(self.config.binary)
         if not binary:
             raise GeminiCliOAuthError(
-                "Gemini CLI is not installed in the OpenShorts backend image. "
-                "Rebuild the backend from this branch."
+                "Gemini CLI is not installed on the OpenShorts backend host. "
+                "Install @google/gemini-cli and verify GEMINI_CLI_BINARY."
             )
 
         os.makedirs(self.config.working_directory, exist_ok=True)
@@ -262,9 +267,13 @@ class GeminiCliOAuthClient:
                 )
             ):
                 raise GeminiCliOAuthError(
-                    "Gemini CLI OAuth is not authenticated inside the backend "
-                    "container. Run: docker compose exec backend sh -lc "
-                    "'NO_BROWSER=true gemini'"
+                    "Gemini CLI OAuth is not authenticated for the OpenShorts "
+                    "service user. On the AWS host run: sudo -u openshorts -H "
+                    "env HOME=/var/lib/openshorts NO_BROWSER=true "
+                    "GOOGLE_GENAI_USE_GCA=true "
+                    "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true "
+                    "GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli "
+                    "gemini"
                 )
 
             raise GeminiCliOAuthError(
