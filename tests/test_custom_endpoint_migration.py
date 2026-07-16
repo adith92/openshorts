@@ -8,6 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 class CustomEndpointMigrationTests(unittest.TestCase):
     def test_active_source_has_no_gemini_cli_runtime(self):
         excluded_directories = {".git", "node_modules", "dist", ".deploy"}
+        excluded_files = {
+            "test_custom_endpoint_migration.py",
+            "MIGRATION_CUSTOM_ENDPOINT.md",
+        }
         stale_markers = (
             "gemini_cli_oauth_client",
             "OPENSHORTS_SERVER_GEMINI_OAUTH",
@@ -22,7 +26,7 @@ class CustomEndpointMigrationTests(unittest.TestCase):
                 continue
             if any(part in excluded_directories for part in path.parts):
                 continue
-            if path.name == "test_custom_endpoint_migration.py":
+            if path.name in excluded_files:
                 continue
             if path.suffix.lower() not in {
                 ".py",
