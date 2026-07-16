@@ -37,6 +37,10 @@ rm -f /etc/nginx/sites-enabled/default
 
 # 5. Setup Systemd services
 log "Configuring Systemd..."
+mkdir -p /etc/openshorts
+if [ ! -f /etc/openshorts/openshorts.env ]; then
+    cp deploy/aws-native/openshorts.env.example /etc/openshorts/openshorts.env
+fi
 cp deploy/aws-native/openshorts-backend.service /etc/systemd/system/
 cp deploy/aws-native/openshorts-renderer.service /etc/systemd/system/
 

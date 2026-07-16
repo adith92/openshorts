@@ -7,20 +7,20 @@ Wants=network-online.target
 Type=simple
 User=openshorts
 Group=openshorts
-WorkingDirectory=/opt/openshorts/render-service
+WorkingDirectory=/var/lib/openshorts/render-service
 EnvironmentFile=/etc/openshorts/openshorts.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 Environment=PORT=3100
 Environment=OUTPUT_DIR=/var/lib/openshorts/output
-Environment=REMOTION_BUNDLE_PATH=/opt/openshorts/remotion
-ExecStart=/usr/bin/node /opt/openshorts/render-service/dist/server.js
+Environment=REMOTION_BUNDLE_PATH=/var/lib/openshorts/remotion
+ExecStart=/usr/bin/node /var/lib/openshorts/render-service/dist/server.js
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=300
 TimeoutStopSec=60
 NoNewPrivileges=true
 ProtectSystem=full
-ReadWritePaths=/var/lib/openshorts /opt/openshorts
+ReadWritePaths=/var/lib/openshorts
 LimitNOFILE=65536
 
 [Install]

@@ -7,10 +7,10 @@ Wants=network-online.target
 Type=simple
 User=openshorts
 Group=openshorts
-WorkingDirectory=/opt/openshorts
+WorkingDirectory=/var/lib/openshorts
 EnvironmentFile=/etc/openshorts/openshorts.env
-Environment=PATH=/opt/openshorts/.venv/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=/opt/openshorts/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
+Environment=PATH=/var/lib/openshorts/.venv/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/var/lib/openshorts/.venv/bin/uvicorn app:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=180
@@ -19,7 +19,7 @@ KillSignal=SIGINT
 NoNewPrivileges=true
 PrivateTmp=false
 ProtectSystem=full
-ReadWritePaths=/var/lib/openshorts /opt/openshorts
+ReadWritePaths=/var/lib/openshorts
 LimitNOFILE=65536
 
 [Install]
