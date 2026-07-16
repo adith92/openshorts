@@ -1,35 +1,37 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
-// https://vitejs.dev/config/
+const backendTarget = process.env.VITE_DEV_BACKEND_URL || 'http://127.0.0.1:8000'
+const rendererTarget = process.env.VITE_DEV_RENDERER_URL || 'http://127.0.0.1:3100'
+
 export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
       '/api': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/videos': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/thumbnails': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/gallery': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/video': {
-        target: 'http://backend:8000',
+        target: backendTarget,
         changeOrigin: true,
       },
       '/render': {
-        target: 'http://renderer:3100',
+        target: rendererTarget,
         changeOrigin: true,
-      }
-    }
-  }
+      },
+    },
+  },
 })
