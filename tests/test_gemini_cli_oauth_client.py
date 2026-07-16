@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from gemini_cli_oauth_client import (
     CONFIG_PREFIX,
+    DEFAULT_WORKING_DIRECTORY,
     GeminiCliOAuthClient,
     GeminiCliOAuthConfig,
     GeminiCliOAuthError,
@@ -30,6 +31,7 @@ class GeminiCliOAuthConfigTests(unittest.TestCase):
         self.assertIsInstance(config, GeminiCliOAuthConfig)
         self.assertEqual(config.model, "auto")
         self.assertEqual(config.safe_endpoint_label, "gemini-cli-oauth")
+        self.assertEqual(config.working_directory, DEFAULT_WORKING_DIRECTORY)
 
     def test_ignores_other_provider(self):
         self.assertIsNone(
@@ -79,7 +81,7 @@ class GeminiCliOAuthClientTests(unittest.TestCase):
 
     @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
     @patch("gemini_cli_oauth_client.subprocess.run")
-    def test_returns_clear_login_instruction(self, run_mock, _which_mock):
+    def test_returns_clear_native_login_instruction(self, run_mock, _which_mock):
         run_mock.return_value = subprocess.CompletedProcess(
             args=[],
             returncode=1,
@@ -90,7 +92,7 @@ class GeminiCliOAuthClientTests(unittest.TestCase):
         client = GeminiCliOAuthClient(self.config)
         with self.assertRaisesRegex(
             GeminiCliOAuthError,
-            "docker compose exec backend",
+            "sudo -u openshorts",
         ):
             client.models.generate_content(contents="hello")
 
