@@ -1,0 +1,37 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "vite",
+  "installCommand": "npm --prefix dashboard ci",
+  "buildCommand": "npm --prefix dashboard run build",
+  "outputDirectory": "dashboard/dist",
+  "rewrites": [
+    {
+      "source": "/api/:path*",
+      "destination": "https://www.openshorts.app/api/:path*"
+    },
+    {
+      "source": "/videos/:path*",
+      "destination": "https://www.openshorts.app/videos/:path*"
+    },
+    {
+      "source": "/thumbnails/:path*",
+      "destination": "https://www.openshorts.app/thumbnails/:path*"
+    },
+    {
+      "source": "/gallery/:path*",
+      "destination": "https://www.openshorts.app/gallery/:path*"
+    },
+    {
+      "source": "/video/:path*",
+      "destination": "https://www.openshorts.app/video/:path*"
+    },
+    {
+      "source": "/render/:path*",
+      "destination": "https://www.openshorts.app/render/:path*"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
