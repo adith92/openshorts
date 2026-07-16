@@ -1,297 +1,284 @@
-# OpenShorts.app
+# OpenShorts
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Open Source](https://badges.frapsoft.com/os/v1/open-source.svg?v=103)](https://opensource.org/)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](http://makeapullrequest.com)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
-[![GitHub stars](https://img.shields.io/github/stars/mutonby/openshorts?style=social)](https://github.com/mutonby/openshorts)
-[![Last Commit](https://img.shields.io/github/last-commit/mutonby/openshorts)](https://github.com/mutonby/openshorts/commits/main)
+OpenShorts is a self-hosted AI video platform for turning long-form video into short clips, generating AI-assisted UGC videos, and preparing YouTube assets.
 
-**Free & open source AI video platform** with 3 tools in one: **Clip Generator**, **AI Shorts (UGC videos with AI actors)**, and **YouTube Studio**. Self-hosted with Docker. No watermarks, no limits.
+This fork targets a **native AWS deployment** using Linux services. Docker and Vercel are not part of the supported deployment path.
 
-https://github.com/user-attachments/assets/b45fa983-16b4-48b5-ac5b-a267836b9ad9
-
-
-
-### Video Tutorial: How it works
-[![OpenShorts Tutorial](https://img.youtube.com/vi/xlyjD1qCaX0/maxresdefault.jpg)](https://www.youtube.com/watch?v=xlyjD1qCaX0 "Click to watch the video on YouTube")
-
-*Click the image above to watch the full walkthrough.*
-
----
-
-## 3 Tools in 1 Platform
-
-### 1. Clip Generator
-Turn your long-form videos — podcasts, webinars, livestreams, vlogs, interviews — into viral-ready 9:16 shorts for TikTok, Instagram Reels, and YouTube Shorts.
-
-![Clip Results](screenshots/clip-results.png)
-
-### 2. AI Shorts (UGC Video Creator)
-Generate marketing videos with AI actors for **any product or business**. No camera, no studio, no influencer budget. Just describe your product or paste a URL.
-
-![AI Shorts Setup](screenshots/ai-shorts.png)
-
-- **Two cost modes**: Low Cost (~$0.65/video) and Premium (~$2/video)
-- Works for any business: SaaS, restaurants, e-commerce, coaching, local businesses
-- AI-generated actors with lip-sync, voiceover, b-roll, and TikTok-style subtitles
-- Choose from a shared avatar gallery or upload your own photo
-- Publish directly to TikTok, Instagram, and YouTube
-
-### 3. YouTube Studio
-Complete free AI YouTube toolkit: thumbnails, titles, descriptions, and direct publishing.
-
-![YouTube Studio](screenshots/youtube-studio.png)
-
-- AI thumbnail generator with face overlay
-- 10 viral title suggestions with refinement chat
-- Auto-generated descriptions with chapter timestamps
-- One-click publish to YouTube
-
-### UGC Video Gallery
-All generated videos and avatars are saved to a public gallery with SEO pages for each video.
-
-![UGC Gallery](screenshots/ugc-gallery.png)
-
-- Public gallery page with hover-to-play (`/gallery`)
-- Individual SEO video pages with og:video meta tags (`/video/{id}`)
-- JSON-LD structured data for search engines
-- Avatar gallery with prompt history
-
----
-
-## Key Features
+## Main features
 
 ### Clip Generator
-- **Viral Moment Detection**: Google Gemini 3.0 Flash analyzes transcripts and scene boundaries to detect 3-15 high-potential moments
-- **Smart 9:16 Cropping**: Dual-mode AI reframing — TRACK mode (MediaPipe + YOLOv8 face tracking) and GENERAL mode (blurred background)
-- **Auto Subtitles**: faster-whisper with word-level timestamps, styled and burned into clips
-- **AI Voice Dubbing**: ElevenLabs integration for 30+ languages with voice cloning
-- **Hook Text Overlays**: AI-generated attention-grabbing text overlays
-- **AI Video Effects**: Gemini-generated FFmpeg filters for professional effects
 
-### AI Shorts Pipeline
-1. **Analyze**: Scrape website URL + web research, or generate from manual description
-2. **Script**: AI writes viral scripts (hook - problem - solution - CTA format)
-3. **Actor**: Generate AI actors with Flux 2 Pro or select from shared gallery
-4. **Voice**: ElevenLabs TTS voiceover (English/Spanish, male/female)
-5. **Video**: Talking head generation (Hailuo 2.3 Fast img2video + VEED Lipsync)
-6. **B-roll**: AI-generated visuals with Ken Burns effect
-7. **Composite**: FFmpeg final assembly with subtitles and hook overlays
-8. **Publish**: Direct posting to TikTok, Instagram Reels, YouTube Shorts via Upload-Post
+- transcript-based viral moment detection;
+- automatic short clip extraction;
+- 9:16 reframing and subject tracking;
+- subtitle generation and burn-in;
+- hook overlays and AI-assisted video effects;
+- optional translation and dubbing;
+- generated clips served locally and optionally backed up to S3.
+
+### AI Shorts
+
+- product or website analysis;
+- script generation;
+- AI actor and voice workflows;
+- B-roll generation;
+- FFmpeg-based composition;
+- optional publishing integrations.
 
 ### YouTube Studio
-- AI-powered title generation with 10 viral options
-- Interactive refinement chat for titles
-- AI thumbnail generation with custom face + background
-- Auto descriptions with chapter timestamps from Whisper transcript
-- Direct YouTube publishing via Upload-Post
 
-### Social Auto-Publishing
-- **One-click posting** to TikTok, Instagram Reels, and YouTube Shorts simultaneously
-- **Schedule uploads** for any date and time — plan your content calendar and let OpenShorts publish automatically
-- **Multi-platform distribution** — publish to all your social networks at once from a single interface
-- Upload-Post integration with async uploads
+- title suggestions;
+- thumbnail generation;
+- description generation;
+- chapter timestamp support;
+- optional publishing integration.
 
-### Infrastructure
-- S3 cloud backup (private bucket for clips, public bucket for gallery/avatars)
-- SEO gallery pages served by FastAPI with JSON-LD structured data
-- Shared avatar gallery across all users
-- Async job queue with configurable concurrency
+## Architecture
 
----
+```text
+Internet
+  |
+  v
+Nginx :80/:443
+  |
+  +-- React/Vite static frontend
+  +-- FastAPI backend       127.0.0.1:8000
+  +-- Remotion renderer     127.0.0.1:3100
+  +-- local uploads/output  /var/lib/openshorts
+  +-- AWS S3 via EC2 IAM instance role
+  +-- Gemini CLI OAuth      /var/lib/openshorts/.gemini
+```
 
-## Who Is This For?
+Production services are managed by `systemd` and run as the dedicated Linux user `openshorts`.
 
-- **Content creators** — Turn long videos into shorts automatically, publish to all platforms at once
-- **Marketing agencies** — Generate UGC videos for clients at scale, no actors or studios needed
-- **SaaS founders** — Create product demos and marketing shorts from just a URL
-- **E-commerce brands** — Product videos with AI actors for TikTok Shop, Instagram, YouTube
-- **Local businesses** — Restaurants, gyms, real estate, coaching — affordable video marketing
-- **Developers** — Self-host, customize the pipeline, integrate via API
+## Repository layout
 
----
-
-## AI Shorts Showcase
-
-Videos generated with OpenShorts AI Shorts — no camera, no studio, no actors:
-
-| | | |
-|:---:|:---:|:---:|
-| [![Biohacking for Investors](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/cdceec1b/actor.png)](https://openshorts.app/video/cdceec1b) | [![Secret Weapon for Devs](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/d3a80b6b/actor.png)](https://openshorts.app/video/d3a80b6b) | [![El Secreto de los Agentes de IA](https://test-videos-upload-post.s3.eu-west-3.amazonaws.com/videos/8ab7de92/actor.png)](https://openshorts.app/video/8ab7de92) |
-| **Biohacking for Investors** · LOW COST | **Secret Weapon for Devs** · LOW COST | **El Secreto de los Agentes de IA** · PREMIUM |
-
-> Browse all videos at [openshorts.app/gallery](https://openshorts.app/gallery)
-
----
-
-## OpenShorts vs Competitors
-
-| Feature | OpenShorts | Opus Clip | CapCut | Vizard | Klap | Descript |
-|---------|:---:|:---:|:---:|:---:|:---:|:---:|
-| **Price** | **Free** | $15-29/mo | $8/mo | $15-20/mo | $23-63/mo | $24-65/mo |
-| **Self-hosted** | **Yes** | No | No | No | No | No |
-| **Open source** | **Yes** | No | No | No | No | No |
-| **Watermark** | **Never** | Free tier | Some | Free tier | Free tier | Free tier |
-| **Upload limits** | **None** | 10-30GB | Credit-based | 60min-10hr | 10-100 vids/mo | 60min-40hr |
-| **AI clip detection** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Smart 9:16 reframing** | Yes | Yes | Yes | Yes | Yes | No |
-| **Auto subtitles** | Yes | Yes | Yes | Yes | Yes | Yes |
-| **Voice dubbing (30+ langs)** | Yes | No | Pro only | No | Pro only | Business only |
-| **AI UGC actors** | **Yes** | No | No | No | No | No |
-| **AI video effects** | Yes | No | Yes | No | No | No |
-| **Hook text overlays** | Yes | No | No | No | No | No |
-| **YouTube Studio (titles, thumbnails)** | **Yes** | No | No | No | No | No |
-| **Social auto-publishing** | Yes | Pro only | TikTok only | Paid only | Paid only | No |
-| **Schedule uploads** | Yes | Pro only | No | Paid only | Paid only | No |
-| **Data privacy** | **Your server** | Their cloud | Their cloud | Their cloud | Their cloud | Their cloud |
-
----
-
-## How Much Does It Cost?
-
-OpenShorts is free. You only pay for the AI APIs you use — and most have generous free tiers:
-
-| Service | Free Tier | Paid Cost | Used For |
-|---------|-----------|-----------|----------|
-| **Google Gemini** | Free trial with generous limits | < $0.01 per 10-min video | Viral moment detection, script generation, web research |
-| **fal.ai** | Pay-per-use | ~$0.50-1.50 per AI Short | Actor generation, talking head video, lip-sync |
-| **ElevenLabs** | Free tier available | Pay-per-use | Voiceover, voice dubbing |
-| **Upload-Post** | **10 free uploads/month** to all networks (no credit card) | Pay-per-use | Auto-publishing to TikTok, Instagram, YouTube |
-| **AWS S3** | Optional | ~$0.023/GB | Cloud backup for clips and gallery |
-
-**Bottom line:** You can clip videos for practically free with Gemini, and publish 10 videos/month to all social networks at zero cost with Upload-Post.
-
----
+```text
+.
+├── app.py                         FastAPI API and job queue
+├── main.py                        clipping pipeline
+├── custom_ai_client.py            OpenAI-compatible provider
+├── gemini_cli_oauth_client.py     Gemini CLI OAuth provider
+├── sitecustomize.py               provider compatibility hook
+├── s3_uploader.py                 S3 backup and gallery integration
+├── dashboard/                     React/Vite frontend
+├── render-service/                Node.js Remotion render API
+├── remotion/                      Remotion compositions
+├── tests/                         provider tests
+├── CUSTOM_AI_ENDPOINT.md          custom endpoint guide
+└── GEMINI_CLI_OAUTH.md            native OAuth guide
+```
 
 ## Requirements
 
-- **Docker & Docker Compose**
-- **Google Gemini API Key** ([Free — get it here](https://aistudio.google.com/app/apikey)) — required for all AI features
-- **fal.ai API Key** ([Pay-per-use](https://fal.ai)) — required for AI Shorts (actor generation, video, lip-sync)
-- **ElevenLabs API Key** ([Free tier](https://elevenlabs.io)) — required for voiceover/dubbing
-- **Upload-Post API Key** ([free tier](https://upload-post.com)) — required for direct social posting
+Recommended production host:
 
----
+- Ubuntu Server LTS;
+- Python 3.11;
+- Node.js 22 LTS;
+- FFmpeg;
+- Nginx;
+- Chromium or the browser runtime required by the installed Remotion version;
+- at least 16 GiB RAM for the initial CPU deployment;
+- encrypted EBS storage with sufficient free space;
+- AWS Systems Manager Session Manager access;
+- EC2 IAM instance role for S3 access.
 
-## Getting Started
+The ML and video dependencies are substantial. Avoid very small EC2 instance types and undersized root volumes.
 
-### 1. Clone
+## Native local development
+
+### Backend
+
 ```bash
-git clone https://github.com/your-username/OpenShorts.git
-cd OpenShorts
+python3.11 -m venv .venv
+. .venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-### 2. Configure (optional)
+### Frontend
+
 ```bash
-cp .env.example .env
-# Edit .env with your AWS keys for S3 backup
+npm --prefix dashboard ci
+npm --prefix dashboard run dev
 ```
 
-### 3. Launch
+The Vite development server proxies API and media paths to the local backend and renderer.
+
+### Renderer
+
 ```bash
-docker compose up --build
+npm --prefix render-service ci
+npm --prefix remotion ci
+npm --prefix render-service run build
+
+PORT=3100 \
+OUTPUT_DIR="$PWD/output" \
+REMOTION_BUNDLE_PATH="$PWD/remotion" \
+node render-service/dist/server.js
 ```
 
-### 4. Open Dashboard
-Navigate to **`http://localhost:5175`**
+### Production frontend build
 
-1. Go to **Settings** and enter your API keys (Gemini, fal.ai, ElevenLabs, Upload-Post)
-2. **Clip Generator**: Upload a long-form video to generate viral shorts
-3. **AI Shorts**: Describe your product or paste a URL to generate UGC marketing videos
-4. **YouTube Studio**: Generate thumbnails, titles, and descriptions for YouTube
-5. **UGC Gallery**: Browse all generated videos and avatars
+```bash
+npm --prefix dashboard ci
+npm --prefix dashboard run build
+```
 
----
+Serve `dashboard/dist` through Nginx.
 
-## Technical Pipeline
+## AI providers
 
-### Clip Generator
-1. **Ingest** — Local video upload (or self-hosted URL ingest via yt-dlp)
-2. **Transcribe** — faster-whisper with word-level timestamps
-3. **Detect** — PySceneDetect for scene boundaries
-4. **Analyze** — Gemini identifies 3-15 viral moments (15-60s each)
-5. **Extract** — FFmpeg precise clip cutting
-6. **Reframe** — AI vertical cropping with subject tracking
-7. **Effects** — Subtitles, hooks, AI video effects
-8. **Publish** — S3 backup + Upload-Post social distribution
+OpenShorts supports three provider modes for transcript-based analysis.
 
-### AI Shorts
-1. **Analyze** — Website scraping + Gemini web research (or manual description)
-2. **Script** — Gemini generates viral scripts with segments
-3. **Actor** — Flux 2 Pro portrait generation (or gallery/upload)
-4. **Voice** — ElevenLabs TTS voiceover
-5. **Video** — Hailuo 2.3 Fast img2video + VEED Lipsync (Low Cost) or Kling Avatar v2 (Premium)
-6. **B-roll** — Flux 2 Pro image generation + Ken Burns effect
-7. **Composite** — FFmpeg assembly with ASS subtitles and hook overlays
-8. **Gallery** — Upload to public S3 with metadata for SEO pages
-9. **Publish** — Upload-Post to TikTok, Instagram, YouTube
+### Google Gemini API key
 
----
+Uses the regular Google GenAI client and supports Gemini-specific APIs required by direct file or video workflows.
 
-## Tech Stack
+### OpenAI-compatible endpoint
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.11, FastAPI, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx |
-| Frontend | React 18, Vite 4, Tailwind CSS 3.4 |
-| AI APIs | Google Gemini, fal.ai (Flux, Hailuo, VEED, Kling), ElevenLabs |
-| Infrastructure | Docker + Docker Compose, AWS S3 |
-| Publishing | Upload-Post API (TikTok, Instagram, YouTube) |
+Supports internal or external gateways exposing `POST /chat/completions`.
 
----
+See [CUSTOM_AI_ENDPOINT.md](CUSTOM_AI_ENDPOINT.md).
 
-## Environment Variables
+### Gemini CLI OAuth
 
-**Server-side (.env):**
-| Variable | Description |
-|----------|------------|
-| `AWS_ACCESS_KEY_ID` | AWS access key for S3 |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key |
-| `AWS_REGION` | AWS region (default: us-east-1) |
-| `AWS_S3_BUCKET` | Private bucket for clip backup |
-| `AWS_S3_PUBLIC_BUCKET` | Public bucket for gallery/avatars |
-| `MAX_CONCURRENT_JOBS` | Concurrent processing limit (default: 5) |
+Uses the official `@google/gemini-cli` package and its cached Google OAuth session.
 
-**Client-side (encrypted in localStorage):**
-| Key | Description |
-|-----|------------|
-| `GEMINI_API_KEY` | Google Gemini — required |
-| `FAL_KEY` | fal.ai — required for AI Shorts |
-| `ELEVENLABS_API_KEY` | ElevenLabs — required for voiceover/dubbing |
-| `UPLOAD_POST_API_KEY` | Upload-Post — required, for social posting |
+This mode supports text-based analysis only. Direct Gemini Files API video uploads still require the regular Gemini API provider.
 
----
+See [GEMINI_CLI_OAUTH.md](GEMINI_CLI_OAUTH.md).
 
-## Security & Performance
+## Native Gemini OAuth on AWS
 
-- **Non-Root Execution**: Containers run as dedicated `appuser`
-- **Concurrency Control**: Semaphore-based job queue (`MAX_CONCURRENT_JOBS`)
-- **Auto-Cleanup**: Automatic purging of old jobs (1h retention)
-- **Encrypted Keys**: API keys encrypted client-side, never stored server-side
-- **Upload Validation**: Image uploads validated for format and minimum size
-- **File Limits**: 2GB upload limit protection
+Run the one-time login as the same Linux user that runs the backend:
 
----
+```bash
+sudo -u openshorts -H env \
+  HOME=/var/lib/openshorts \
+  NO_BROWSER=true \
+  GOOGLE_GENAI_USE_GCA=true \
+  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \
+  GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli \
+  /usr/local/bin/gemini
+```
 
-## Social Media Setup (Upload-Post)
+Verify it:
 
-1. **Register**: [app.upload-post.com/login](https://app.upload-post.com/login)
-2. **Create Profile**: Go to [Manage Users](https://app.upload-post.com/manage-users)
-3. **Connect Accounts**: Link TikTok, Instagram, and/or YouTube
-4. **Get API Key**: Navigate to [API Keys](https://app.upload-post.com/api-keys)
-5. **Use in OpenShorts**: Paste the key in Settings
+```bash
+sudo -u openshorts -H env \
+  HOME=/var/lib/openshorts \
+  NO_BROWSER=true \
+  GOOGLE_GENAI_USE_GCA=true \
+  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \
+  GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli \
+  /usr/local/bin/gemini \
+  -p "Reply with exactly OPENSHORTS_OK" \
+  --output-format json \
+  --approval-mode plan \
+  --skip-trust
+```
 
----
+OAuth credentials remain managed by Gemini CLI under `/var/lib/openshorts/.gemini`. Never commit that directory.
 
-## Star History
+## Environment variables
 
-[![Star History Chart](https://api.star-history.com/svg?repos=mutonby/openshorts&type=Date)](https://star-history.com/#mutonby/openshorts&Date)
+Example server-side values:
 
-## Contributions
+```dotenv
+PYTHONUNBUFFERED=1
+HOME=/var/lib/openshorts
 
-Contributions are welcome! Whether it's adding new AI models, improving the lip-sync pipeline, or building new features — feel free to open a PR.
+UPLOAD_DIR=/var/lib/openshorts/uploads
+OUTPUT_DIR=/var/lib/openshorts/output
+MAX_CONCURRENT_JOBS=1
+
+AWS_REGION=ap-southeast-3
+AWS_S3_BUCKET=replace-private-bucket
+AWS_S3_PUBLIC_BUCKET=replace-public-bucket
+
+NO_BROWSER=true
+GOOGLE_GENAI_USE_GCA=true
+GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true
+GEMINI_CLI_BINARY=/usr/local/bin/gemini
+GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli
+
+REMOTION_BUNDLE_PATH=/opt/openshorts/remotion
+PORT=3100
+```
+
+Use an EC2 IAM instance role instead of storing permanent AWS access keys on the server.
+
+Optional third-party keys entered through the UI include:
+
+- Gemini API key;
+- custom AI gateway key;
+- fal.ai key;
+- ElevenLabs key;
+- Upload-Post key.
+
+Never commit real keys.
+
+## Tests
+
+Provider tests:
+
+```bash
+python -m unittest \
+  tests/test_custom_ai_client.py \
+  tests/test_gemini_cli_oauth_client.py \
+  -v
+```
+
+Frontend build:
+
+```bash
+npm --prefix dashboard ci
+npm --prefix dashboard run build
+```
+
+Renderer build:
+
+```bash
+npm --prefix render-service ci
+npm --prefix remotion ci
+npm --prefix render-service run build
+```
+
+## Production checks
+
+Internal services:
+
+```bash
+curl -fsS http://127.0.0.1:8000/api/config
+curl -fsS http://127.0.0.1:3100/health
+sudo ss -lntp
+```
+
+Expected binding:
+
+```text
+127.0.0.1:8000
+127.0.0.1:3100
+0.0.0.0:80
+0.0.0.0:443
+```
+
+Ports 8000 and 3100 must not be publicly exposed.
+
+## Security notes
+
+- Run backend and renderer as `openshorts`, not root.
+- Connect administratively through AWS Systems Manager where possible.
+- Store generated media outside the Git checkout.
+- Protect `/var/lib/openshorts/.gemini` with restrictive permissions.
+- Use an EC2 IAM role for S3.
+- Keep private clip storage blocked from public access.
+- Public gallery objects should be read-only to the internet and writable only by the instance role.
+- Keep `.env`, private keys, OAuth files, generated media, model weights, virtual environments, dependency folders, and build outputs out of Git.
 
 ## License
 
-MIT License. OpenShorts is yours to use, modify, and scale.
+MIT License. See [LICENSE](LICENSE).
