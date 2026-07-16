@@ -25,7 +25,7 @@ TARGET_DIR="/var/lib/openshorts"
 
 if [ -d "$TARGET_DIR/.git" ]; then
     log "Repository already exists. Pulling latest changes..."
-    sudo -u openshorts -H bash -c "cd $TARGET_DIR && git fetch origin && git checkout $BRANCH && git pull origin $BRANCH"
+    sudo -u openshorts -H bash -c "cd $TARGET_DIR && git fetch origin && git checkout $BRANCH && git reset --hard origin/$BRANCH && git pull origin $BRANCH"
 else
     log "Cloning repository..."
     if [ "$(ls -A $TARGET_DIR)" ]; then
