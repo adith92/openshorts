@@ -68,6 +68,18 @@ class CustomEndpointMigrationTests(unittest.TestCase):
         ):
             self.assertIn(required_text, source)
 
+    def test_custom_endpoint_ui_cancels_stale_model_requests(self):
+        source = (
+            ROOT / "dashboard/src/components/AIProviderSettings.jsx"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("const activeModelRequest = useRef(null);", source)
+        self.assertIn("fetchSequence.current += 1;", source)
+        self.assertGreaterEqual(
+            source.count("activeModelRequest.current?.abort();"),
+            2,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

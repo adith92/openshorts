@@ -128,6 +128,7 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
     const [modelError, setModelError] = useState('');
     const [showAllModels, setShowAllModels] = useState(false);
     const fetchSequence = useRef(0);
+    const activeModelRequest = useRef(null);
 
     useEffect(() => {
         const parsed = parseSavedValue(savedKey);
@@ -142,7 +143,6 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
     }, [savedKey]);
 
     const isCustom = provider === 'openai_compatible';
-    const requiresApiKey = true;
     const canSave = (
         apiKey.trim().length > 0
         && (!isCustom || (
@@ -163,12 +163,19 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
 
     const markDirty = () => setIsSaved(false);
 
+    const cancelModelFetch = useCallback(() => {
+        fetchSequence.current += 1;
+        activeModelRequest.current?.abort();
+        activeModelRequest.current = null;
+    }, []);
+
     const fetchModels = useCallback(async ({ silent = false } = {}) => {
         const cleanBaseUrl = normalizeBaseUrl(baseUrl);
         const cleanApiKey = apiKey.trim();
         const modelsUrl = buildModelsUrl(cleanBaseUrl);
 
         if (!isCustom || !modelsUrl || cleanApiKey.length < 4) {
+            cancelModelFetch();
             setModelOptions([]);
             setModelStatus('idle');
             setModelError('');
@@ -179,6 +186,7 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
         try {
             parsedUrl = new URL(modelsUrl);
         } catch (error) {
+            cancelModelFetch();
             setModelOptions([]);
             setModelStatus('error');
             setModelError('Enter a valid HTTP or HTTPS endpoint URL.');
@@ -186,18 +194,21 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
         }
 
         if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            cancelModelFetch();
             setModelOptions([]);
             setModelStatus('error');
             setModelError('Model discovery only supports HTTP or HTTPS endpoints.');
             return;
         }
 
+        activeModelRequest.current?.abort();
         const sequence = fetchSequence.current + 1;
         fetchSequence.current = sequence;
         setModelStatus('loading');
         if (!silent) setModelError('');
 
         const controller = new AbortController();
+        activeModelRequest.current = controller;
         const timeout = window.setTimeout(() => controller.abort(), 20000);
 
         try {
@@ -249,11 +260,15 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
             );
         } finally {
             window.clearTimeout(timeout);
+            if (activeModelRequest.current === controller) {
+                activeModelRequest.current = null;
+            }
         }
-    }, [apiKey, baseUrl, isCustom]);
+    }, [apiKey, baseUrl, cancelModelFetch, isCustom]);
 
     useEffect(() => {
         if (!isCustom || !baseUrl.trim() || apiKey.trim().length < 4) {
+            cancelModelFetch();
             setModelOptions([]);
             setModelStatus('idle');
             setModelError('');
@@ -264,8 +279,11 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
             fetchModels({ silent: true });
         }, 700);
 
-        return () => window.clearTimeout(timer);
-    }, [apiKey, baseUrl, fetchModels, isCustom]);
+        return () => {
+            window.clearTimeout(timer);
+            cancelModelFetch();
+        };
+    }, [apiKey, baseUrl, cancelModelFetch, fetchModels, isCustom]);
 
     const handleProviderChange = (event) => {
         const nextProvider = event.target.value;
