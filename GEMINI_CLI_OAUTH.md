@@ -1,55 +1,96 @@
-# Gemini CLI OAuth for OpenShorts
+# Persistent Gemini OAuth on an AWS VPS
 
-OpenShorts can use the official `@google/gemini-cli` package for transcript-based AI tasks without storing a Gemini API key in the browser.
+OpenShorts can use the official `@google/gemini-cli` package for transcript-based AI tasks without placing a Gemini API key or Google OAuth token in the browser.
 
-This repository targets a **native AWS deployment**. Docker is not required or supported by the deployment workflow documented here.
-
-## Supported scope
-
-Gemini CLI OAuth supports text-based operations such as:
-
-- viral moment detection from transcripts;
-- timestamp selection;
-- hook text;
-- titles and descriptions.
-
-It does not expose the Gemini Files API. Features that upload a video directly to Gemini must continue using the regular Gemini API provider.
-
-## Runtime identity
-
-Install and run OpenShorts with a dedicated Linux service user:
+The intended production setup is:
 
 ```text
-openshorts
+Browser
+  -> sends non-sensitive provider/model preferences
+FastAPI on AWS VPS
+  -> invokes official Gemini CLI
+Gemini CLI
+  -> reads the cached Google OAuth session owned by Linux user openshorts
 ```
 
-The backend service and the one-time OAuth login must use the same user and home directory:
+## What is stored where
 
-```text
-HOME=/var/lib/openshorts
-```
+### AWS VPS
 
-OAuth credentials are managed by Gemini CLI and stored under:
+Gemini CLI owns and stores the Google OAuth session under:
 
 ```text
 /var/lib/openshorts/.gemini
 ```
 
-Do not copy refresh tokens into the repository, application settings, environment files, or deployment logs.
+This directory must live on persistent encrypted EBS storage and be owned by:
+
+```text
+openshorts:openshorts
+```
+
+Recommended permissions:
+
+```bash
+sudo chown -R openshorts:openshorts /var/lib/openshorts/.gemini
+sudo chmod 0700 /var/lib/openshorts/.gemini
+sudo find /var/lib/openshorts/.gemini -type d -exec chmod 0700 {} +
+sudo find /var/lib/openshorts/.gemini -type f -exec chmod 0600 {} +
+```
+
+### Browser
+
+The browser stores only:
+
+- provider name;
+- model selection;
+- request timeout.
+
+It does not receive or store Google access tokens, refresh tokens, credential files, Gemini CLI paths, or the Linux home directory.
+
+## Server opt-in
+
+Server OAuth is disabled unless the protected service environment contains:
+
+```dotenv
+OPENSHORTS_SERVER_GEMINI_OAUTH=true
+```
+
+Use these settings in `/etc/openshorts/openshorts.env`:
+
+```dotenv
+HOME=/var/lib/openshorts
+OPENSHORTS_SERVER_GEMINI_OAUTH=true
+OPENSHORTS_GEMINI_MODEL=auto
+OPENSHORTS_GEMINI_TIMEOUT_SECONDS=180
+GEMINI_CLI_BINARY=/usr/local/bin/gemini
+GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli
+GEMINI_CLI_CREDENTIAL_DIR=/var/lib/openshorts/.gemini
+NO_BROWSER=true
+GOOGLE_GENAI_USE_GCA=true
+GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true
+```
+
+The service environment file should be owned by `root:openshorts` with mode `0640`.
 
 ## Install Gemini CLI
 
-Install Node.js 22 LTS and the official CLI on the AWS host:
+Use Node.js 22 LTS, then install the official package:
 
 ```bash
 sudo npm install -g @google/gemini-cli@latest
-command -v gemini
-gemini --version
+/usr/local/bin/gemini --version
 ```
 
-## One-time OAuth login on AWS
+## One-time Google login
 
-Connect to the instance through AWS Systems Manager Session Manager, then run:
+Connect through AWS Systems Manager Session Manager and run:
+
+```bash
+sudo bash deploy/aws-native/gemini-oauth-login.sh
+```
+
+Equivalent manual command:
 
 ```bash
 sudo -u openshorts -H env \
@@ -61,84 +102,77 @@ sudo -u openshorts -H env \
   /usr/local/bin/gemini
 ```
 
-Open the URL shown by Gemini CLI in a local browser, complete Google sign-in, and return to the terminal.
+Open the URL or device code shown by the CLI in a local browser and sign in with the Google account that should remain attached to this server.
 
-Never perform this login as `root`, `ubuntu`, or another account. The systemd backend runs as `openshorts` and must be able to read the same credential store.
+Never log in as `root`, `ubuntu`, or another user. The backend runs as `openshorts` and must own the same credential store.
 
-## Verify the OAuth session
+## Verify the stored session
 
 ```bash
-sudo -u openshorts -H env \
-  HOME=/var/lib/openshorts \
-  NO_BROWSER=true \
-  GOOGLE_GENAI_USE_GCA=true \
-  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \
-  GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli \
-  /usr/local/bin/gemini \
-  -p "Reply with exactly OPENSHORTS_OK" \
-  --output-format json \
-  --approval-mode plan \
-  --skip-trust
+sudo bash deploy/aws-native/gemini-oauth-check.sh
 ```
 
-Expected response:
+The checker sends a fixed harmless prompt and requires the response `OPENSHORTS_OK`. Raw CLI output is hidden to reduce the risk of authentication data appearing in logs.
 
-```json
-{
-  "response": "OPENSHORTS_OK"
-}
-```
-
-Restart and verify the backend after authentication:
+Restart the backend after a successful login:
 
 ```bash
 sudo systemctl restart openshorts-backend
 sudo systemctl --no-pager --full status openshorts-backend
 ```
 
-## Configure OpenShorts
+## Configure the frontend
 
 1. Open **Settings**.
-2. Select **Gemini CLI OAuth / Sign in with Google**.
-3. Keep the model set to `auto` unless a specific supported model is required.
-4. Save the AI settings.
-5. Run a transcript-based clipping analysis.
+2. Choose **Gemini OAuth — account stored on AWS server**.
+3. Keep model `auto` unless a specific OAuth-supported model is required.
+4. Click **Use Server OAuth**.
 
-## Required systemd environment
+No Gemini key is requested for this mode.
 
-The backend service should include:
+## Security behavior
 
-```dotenv
-HOME=/var/lib/openshorts
-NO_BROWSER=true
-GOOGLE_GENAI_USE_GCA=true
-GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true
-GEMINI_CLI_BINARY=/usr/local/bin/gemini
-GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli
-```
+- Server OAuth requires explicit administrator opt-in.
+- Google credentials remain on the VPS.
+- Browser configuration cannot override the Gemini binary.
+- Browser configuration cannot override the Gemini working directory.
+- Gemini CLI executes with `--approval-mode plan` and `--skip-trust`.
+- Prompts are passed directly as command arguments to the official CLI.
+- The backend returns only generated text, not credential data.
+- Do not expose the VPS to untrusted users without adding application authentication and rate limiting.
 
-Protect the service environment file and credential directory:
+## Supported scope
 
-```bash
-sudo chown -R openshorts:openshorts /var/lib/openshorts/.gemini
-sudo chmod 700 /var/lib/openshorts/.gemini
-```
+Gemini CLI OAuth supports text-based operations such as:
 
-## Reset OAuth
+- transcript viral-moment analysis;
+- timestamp selection;
+- hook generation;
+- titles and descriptions.
 
-Stop the backend before resetting credentials:
+It does not expose the Gemini Files API. Features that directly upload video files to Gemini must use the regular **Google Gemini API Key** provider.
+
+## Change the attached Google account
+
+Stop the backend and archive the current credential directory:
 
 ```bash
 sudo systemctl stop openshorts-backend
-sudo rm -rf /var/lib/openshorts/.gemini
-sudo install -d -o openshorts -g openshorts -m 0700 /var/lib/openshorts/.gemini
+sudo mv /var/lib/openshorts/.gemini \
+  "/var/lib/openshorts/.gemini.backup.$(date +%Y%m%d-%H%M%S)"
+sudo install -d -o openshorts -g openshorts -m 0700 \
+  /var/lib/openshorts/.gemini
 ```
 
-Run the one-time login again, then start the backend:
+Run the login and check scripts again, then start the backend:
 
 ```bash
+sudo bash deploy/aws-native/gemini-oauth-login.sh
+sudo bash deploy/aws-native/gemini-oauth-check.sh
 sudo systemctl start openshorts-backend
 ```
+
+Remove the backup only after the new account succeeds in a real clipping job.
 
 ## Tests
 
