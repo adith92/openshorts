@@ -28,7 +28,7 @@ ProtectKernelModules=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
 LockPersonality=true
-ReadWritePaths=/var/lib/openshorts
+ReadWritePaths=/var/lib/openshorts /opt/openshorts/output
 LimitNOFILE=65536
 
 [Install]
