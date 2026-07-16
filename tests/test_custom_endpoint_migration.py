@@ -9,10 +9,12 @@ class CustomEndpointMigrationTests(unittest.TestCase):
     def test_active_source_has_no_gemini_cli_runtime(self):
         excluded_directories = {".git", "node_modules", "dist", ".deploy"}
         excluded_files = {
-            # These tests intentionally name the files and settings that must stay
-            # removed, so they are not active runtime references.
+            # These tests and release-gate documents intentionally name removed
+            # files/settings so Codex can verify they remain absent. They are not
+            # active runtime or operating instructions.
             "test_custom_endpoint_migration.py",
             "test_native_aws_deployment.py",
+            "CODEX_RELEASE_GATE_CUSTOM_ENDPOINT.md",
         }
         stale_markers = (
             "gemini_cli_oauth_client",
