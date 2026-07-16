@@ -20,7 +20,10 @@ class NativeAwsDeploymentTests(unittest.TestCase):
                 (REPOSITORY_ROOT / package_file).read_text(encoding="utf-8")
             )
             for dependency_group in ("dependencies", "devDependencies"):
-                for name, version in manifest.get(dependency_group, {}).items():
+                for name, version in manifest.get(
+                    dependency_group,
+                    {},
+                ).items():
                     if name == "remotion" or name.startswith("@remotion/"):
                         versions[f"{package_file}:{name}"] = version
 
@@ -43,7 +46,10 @@ class NativeAwsDeploymentTests(unittest.TestCase):
             / "deploy/aws-native/openshorts-renderer.service"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('const HOST = process.env.HOST || "127.0.0.1";', server_source)
+        self.assertIn(
+            'const HOST = process.env.HOST || "127.0.0.1";',
+            server_source,
+        )
         self.assertIn("app.listen(PORT, HOST,", server_source)
         self.assertIn(
             "ExecStart=/usr/bin/env HOST=127.0.0.1 PORT=3100 ",
@@ -69,6 +75,40 @@ class NativeAwsDeploymentTests(unittest.TestCase):
 
         self.assertNotIn("Docker", landing_source)
         self.assertNotIn("Docker", page_metadata)
+
+    def test_deprecated_gemini_cli_runtime_is_removed(self):
+        removed_paths = (
+            "gemini_cli_oauth_client.py",
+            "GEMINI_CLI_OAUTH.md",
+            "tests/test_gemini_cli_oauth_client.py",
+            "deploy/aws-native/gemini-oauth-login.sh",
+            "deploy/aws-native/gemini-oauth-check.sh",
+        )
+        for relative_path in removed_paths:
+            self.assertFalse(
+                (REPOSITORY_ROOT / relative_path).exists(),
+                relative_path,
+            )
+
+    def test_native_environment_uses_custom_endpoint(self):
+        environment_template = (
+            REPOSITORY_ROOT / "deploy/aws-native/openshorts.env.example"
+        ).read_text(encoding="utf-8")
+
+        for required_setting in (
+            "AI_PROVIDER=openai_compatible",
+            "AI_BASE_URL=",
+            "AI_API_KEY=",
+            "AI_MODEL=",
+        ):
+            self.assertIn(required_setting, environment_template)
+
+        for removed_setting in (
+            "OPENSHORTS_SERVER_GEMINI_OAUTH",
+            "GEMINI_CLI_BINARY",
+            "GEMINI_CLI_CREDENTIAL_DIR",
+        ):
+            self.assertNotIn(removed_setting, environment_template)
 
 
 if __name__ == "__main__":
