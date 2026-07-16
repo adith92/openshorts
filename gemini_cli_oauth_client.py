@@ -6,25 +6,88 @@ import os
 import shutil
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
 CONFIG_PREFIX = "OPENSHORTS_AI_V1:"
-DEFAULT_WORKING_DIRECTORY = os.getenv(
-    "GEMINI_CLI_WORKING_DIR",
-    "/var/lib/openshorts/tmp/gemini-cli",
-).strip() or "/var/lib/openshorts/tmp/gemini-cli"
-
 _GEMINI_CLI_PROVIDERS = {
     "gemini_cli_oauth",
     "gemini-cli-oauth",
     "gemini_cli",
     "gemini-cli",
 }
+_TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
 
 
 class GeminiCliOAuthError(RuntimeError):
     """Raised when Gemini CLI OAuth cannot complete a request."""
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in _TRUE_VALUES
+
+
+def server_oauth_enabled() -> bool:
+    """Return whether the VPS administrator explicitly enabled server OAuth."""
+    return _env_bool("OPENSHORTS_SERVER_GEMINI_OAUTH", False)
+
+
+def _server_home() -> str:
+    return (os.getenv("HOME") or "/var/lib/openshorts").strip() or "/var/lib/openshorts"
+
+
+def _server_binary() -> str:
+    return (os.getenv("GEMINI_CLI_BINARY") or "gemini").strip() or "gemini"
+
+
+def _server_working_directory() -> str:
+    return (
+        os.getenv("GEMINI_CLI_WORKING_DIR")
+        or "/var/lib/openshorts/tmp/gemini-cli"
+    ).strip() or "/var/lib/openshorts/tmp/gemini-cli"
+
+
+def _server_credential_directory() -> Path:
+    configured = (os.getenv("GEMINI_CLI_CREDENTIAL_DIR") or "").strip()
+    if configured:
+        return Path(configured).expanduser()
+    return Path(_server_home()).expanduser() / ".gemini"
+
+
+def _credential_files_exist(directory: Path) -> bool:
+    try:
+        return directory.is_dir() and any(path.is_file() for path in directory.rglob("*"))
+    except OSError:
+        return False
+
+
+def get_gemini_cli_oauth_status() -> dict[str, Any]:
+    """Return non-sensitive server OAuth readiness information."""
+    binary_setting = _server_binary()
+    binary_path = shutil.which(binary_setting)
+    credential_directory = _server_credential_directory()
+    credentials_present = _credential_files_exist(credential_directory)
+    enabled = server_oauth_enabled()
+
+    return {
+        "enabled": enabled,
+        "provider": "gemini_cli_oauth",
+        "scope": "text_only",
+        "binaryInstalled": bool(binary_path),
+        "credentialsPresent": credentials_present,
+        "ready": enabled and bool(binary_path) and credentials_present,
+        "model": (os.getenv("OPENSHORTS_GEMINI_MODEL") or "auto").strip() or "auto",
+        "timeoutSeconds": _number(
+            os.getenv("OPENSHORTS_GEMINI_TIMEOUT_SECONDS"),
+            180.0,
+            10.0,
+            900.0,
+        ),
+    }
 
 
 @dataclass(frozen=True)
@@ -32,7 +95,7 @@ class GeminiCliOAuthConfig:
     model: str = "auto"
     timeout_seconds: float = 180.0
     binary: str = "gemini"
-    working_directory: str = DEFAULT_WORKING_DIRECTORY
+    working_directory: str = "/var/lib/openshorts/tmp/gemini-cli"
 
     @property
     def safe_endpoint_label(self) -> str:
@@ -68,47 +131,60 @@ def _decode_embedded_config(value: str) -> dict[str, Any] | None:
     return data
 
 
+def _build_config(model: Any = None, timeout_seconds: Any = None) -> GeminiCliOAuthConfig:
+    """Build config using client-safe fields and server-controlled runtime paths."""
+    server_model = (os.getenv("OPENSHORTS_GEMINI_MODEL") or "auto").strip() or "auto"
+    requested_model = str(model or server_model).strip() or server_model
+    server_timeout = _number(
+        os.getenv("OPENSHORTS_GEMINI_TIMEOUT_SECONDS"),
+        180.0,
+        10.0,
+        900.0,
+    )
+
+    return GeminiCliOAuthConfig(
+        model=requested_model,
+        timeout_seconds=_number(timeout_seconds, server_timeout, 10.0, 900.0),
+        binary=_server_binary(),
+        working_directory=_server_working_directory(),
+    )
+
+
 def resolve_gemini_cli_oauth_config(
     api_key_argument: str | None,
 ) -> GeminiCliOAuthConfig | None:
-    """Resolve Gemini CLI OAuth settings from browser state or environment."""
+    """Resolve OAuth settings while keeping credentials and paths server-side."""
     embedded = _decode_embedded_config(api_key_argument or "")
 
     if embedded is not None:
         provider = str(embedded.get("provider", "")).strip().lower()
         if provider not in _GEMINI_CLI_PROVIDERS:
             return None
+        if not server_oauth_enabled():
+            raise GeminiCliOAuthError(
+                "Server Gemini OAuth is disabled. Set "
+                "OPENSHORTS_SERVER_GEMINI_OAUTH=true in the protected VPS "
+                "service environment, then restart openshorts-backend."
+            )
 
-        return GeminiCliOAuthConfig(
-            model=str(embedded.get("model") or "auto").strip() or "auto",
-            timeout_seconds=_number(
-                embedded.get("timeoutSeconds"), 180.0, 10.0, 900.0
-            ),
-            binary=str(embedded.get("binary") or "gemini").strip() or "gemini",
-            working_directory=(
-                str(
-                    embedded.get("workingDirectory")
-                    or DEFAULT_WORKING_DIRECTORY
-                ).strip()
-                or DEFAULT_WORKING_DIRECTORY
-            ),
+        # Deliberately ignore client-supplied binary and workingDirectory values.
+        # Those are privileged server settings and must never be controlled by a browser.
+        return _build_config(
+            model=embedded.get("model"),
+            timeout_seconds=embedded.get("timeoutSeconds"),
         )
 
     provider = os.getenv("AI_PROVIDER", "").strip().lower()
     if provider not in _GEMINI_CLI_PROVIDERS:
         return None
+    if not server_oauth_enabled():
+        raise GeminiCliOAuthError(
+            "AI_PROVIDER requests Gemini CLI OAuth, but server OAuth is disabled."
+        )
 
-    return GeminiCliOAuthConfig(
-        model=(os.getenv("AI_MODEL") or "auto").strip() or "auto",
-        timeout_seconds=_number(
-            os.getenv("AI_TIMEOUT_SECONDS"), 180.0, 10.0, 900.0
-        ),
-        binary=(os.getenv("GEMINI_CLI_BINARY") or "gemini").strip() or "gemini",
-        working_directory=(
-            os.getenv("GEMINI_CLI_WORKING_DIR")
-            or DEFAULT_WORKING_DIRECTORY
-        ).strip()
-        or DEFAULT_WORKING_DIRECTORY,
+    return _build_config(
+        model=os.getenv("AI_MODEL"),
+        timeout_seconds=os.getenv("AI_TIMEOUT_SECONDS"),
     )
 
 
@@ -189,7 +265,7 @@ class _GeminiCliModelsAPI:
 
 
 class GeminiCliOAuthClient:
-    """Use the official Gemini CLI and its cached Google OAuth session."""
+    """Use the official Gemini CLI and its persistent VPS OAuth session."""
 
     def __init__(self, config: GeminiCliOAuthConfig) -> None:
         self.config = config
@@ -208,8 +284,20 @@ class GeminiCliOAuthClient:
         binary = shutil.which(self.config.binary)
         if not binary:
             raise GeminiCliOAuthError(
-                "Gemini CLI is not installed on the OpenShorts backend host. "
+                "Gemini CLI is not installed on the OpenShorts VPS. "
                 "Install @google/gemini-cli and verify GEMINI_CLI_BINARY."
+            )
+
+        credential_directory = _server_credential_directory()
+        if not _credential_files_exist(credential_directory):
+            raise GeminiCliOAuthError(
+                "No persistent Gemini OAuth session was found for the "
+                "OpenShorts service user. Log in once on the VPS with: "
+                "sudo -u openshorts -H env HOME=/var/lib/openshorts "
+                "NO_BROWSER=true GOOGLE_GENAI_USE_GCA=true "
+                "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true "
+                "GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli "
+                "gemini"
             )
 
         os.makedirs(self.config.working_directory, exist_ok=True)
@@ -228,6 +316,7 @@ class GeminiCliOAuthClient:
             command.extend(["--model", selected_model])
 
         environment = os.environ.copy()
+        environment.setdefault("HOME", _server_home())
         environment.setdefault("GOOGLE_GENAI_USE_GCA", "true")
         environment.setdefault("GEMINI_FORCE_ENCRYPTED_FILE_STORAGE", "true")
         environment.setdefault("NO_BROWSER", "true")
@@ -267,13 +356,8 @@ class GeminiCliOAuthClient:
                 )
             ):
                 raise GeminiCliOAuthError(
-                    "Gemini CLI OAuth is not authenticated for the OpenShorts "
-                    "service user. On the AWS host run: sudo -u openshorts -H "
-                    "env HOME=/var/lib/openshorts NO_BROWSER=true "
-                    "GOOGLE_GENAI_USE_GCA=true "
-                    "GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true "
-                    "GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli "
-                    "gemini"
+                    "The Gemini OAuth session on the VPS is missing or expired. "
+                    "Run the one-time login again as the openshorts service user."
                 )
 
             raise GeminiCliOAuthError(
@@ -302,7 +386,6 @@ class GeminiCliOAuthClient:
 
         return SimpleNamespace(
             text=response_text,
-            # Avoid main.py's hard-coded Gemini API pricing calculation.
             usage_metadata=None,
             custom_usage_metadata=payload.get("stats"),
             model_version=selected_model,
