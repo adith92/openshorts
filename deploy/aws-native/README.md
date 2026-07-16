@@ -31,13 +31,15 @@ The EC2 root volume should use encrypted persistent EBS storage. Do not place `/
 
 ## Install Gemini CLI
 
-Use Node.js 22 LTS:
+Use Node.js 22 LTS and install only the official scoped package:
 
 ```bash
 node --version
 sudo npm install -g @google/gemini-cli@latest
 /usr/local/bin/gemini --version
 ```
+
+Do not install similarly named unscoped packages.
 
 ## Environment
 
@@ -64,6 +66,7 @@ Do not add Google OAuth tokens or long-lived AWS access keys to the environment 
 Connect through AWS Systems Manager Session Manager, then run:
 
 ```bash
+cd /opt/openshorts
 sudo bash deploy/aws-native/gemini-oauth-login.sh
 ```
 
@@ -79,9 +82,10 @@ They survive application rebuilds, Git updates, service restarts, and EC2 reboot
 
 Do not run the login as `root` or `ubuntu`. The backend service runs as `openshorts` and must own the same credential store.
 
-## Verify OAuth
+## Verify OAuth before starting the backend
 
 ```bash
+cd /opt/openshorts
 sudo bash deploy/aws-native/gemini-oauth-check.sh
 ```
 
@@ -92,6 +96,8 @@ PASS: persistent Gemini OAuth is ready for the OpenShorts service user
 ```
 
 The checker hides raw CLI output so authentication data cannot leak into terminal logs.
+
+Do not enable production traffic until this check succeeds.
 
 ## Install systemd services
 
@@ -147,6 +153,8 @@ The server feature is disabled unless this explicit opt-in exists:
 ```dotenv
 OPENSHORTS_SERVER_GEMINI_OAUTH=true
 ```
+
+Do not expose the application publicly without authentication and rate limiting. Anyone who can submit a clipping job can consume the OAuth account's available quota.
 
 ## Scope limitation
 
