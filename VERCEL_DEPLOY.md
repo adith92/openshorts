@@ -1,9 +1,9 @@
 # Deploy OpenShorts Frontend to Vercel
 
-OpenShorts is deployed as a split architecture:
+OpenShorts uses a split deployment architecture:
 
 - **Vercel** serves the React/Vite dashboard.
-- **Docker/EC2** continues to run FastAPI, FFmpeg processing, background jobs, local output files, Gemini CLI OAuth, and the Remotion renderer.
+- **Docker/EC2** runs FastAPI, FFmpeg processing, background jobs, generated media, Gemini CLI OAuth, and the Remotion renderer.
 
 The repository root contains `vercel.json`, so the project can be imported without changing the Vercel Root Directory. Vercel runs:
 
@@ -18,9 +18,9 @@ and publishes:
 dashboard/dist
 ```
 
-## Temporary upstream proxy
+## Backend hostname required
 
-The Vercel deployment proxies these paths to the existing OpenShorts server:
+The Vercel frontend proxies these paths to the backend:
 
 - `/api/*`
 - `/videos/*`
@@ -29,30 +29,30 @@ The Vercel deployment proxies these paths to the existing OpenShorts server:
 - `/video/*`
 - `/render/*`
 
-The temporary upstream is:
+The configured backend origin is:
 
 ```text
-https://www.openshorts.app
+https://api.openshorts.app
 ```
 
-Do not point `www.openshorts.app` to Vercel while it is also used as the upstream, because that would create a rewrite loop.
+Before the complete application can work:
 
-Before moving the primary domain to Vercel, create a dedicated backend hostname such as:
+1. Create the DNS record `api.openshorts.app` and point it to the EC2 server.
+2. Keep ports `8000` and `3100` private where possible. Public traffic should enter through Nginx on ports `80` and `443`.
+3. Enable HTTPS for `api.openshorts.app` using a valid certificate.
+4. Confirm that `https://api.openshorts.app/api/config` returns JSON before testing the Vercel frontend.
 
-```text
-api.openshorts.app
-```
-
-Point that hostname to the EC2/Nginx server, enable HTTPS, and replace the rewrite destinations in `vercel.json`.
+Do not use `www.openshorts.app` as both the Vercel frontend domain and the rewrite destination. That configuration creates a routing loop.
 
 ## Deploy
 
 1. Import `adith92/openshorts` into Vercel.
 2. Keep the project root at the repository root.
-3. Vercel reads the build settings from `vercel.json`.
-4. Deploy first on the generated `*.vercel.app` preview URL.
-5. Test dashboard loading, `/api/config`, uploads, job status polling, video playback, thumbnails, gallery, and rendering.
-6. Only move the production domain after the dedicated backend hostname is working.
+3. Vercel reads its build settings from `vercel.json`.
+4. Deploy first on the generated `*.vercel.app` URL.
+5. Test dashboard loading and deep links.
+6. Confirm `/api/config`, uploads, job status polling, video playback, thumbnails, gallery, and rendering.
+7. Only move the production frontend domain after `api.openshorts.app` is healthy.
 
 ## What must remain outside Vercel
 
@@ -67,4 +67,4 @@ Do not deploy the current Python backend as Vercel Functions without a major red
 - persistent Gemini CLI OAuth credentials;
 - a separate Remotion rendering service.
 
-A future cloud-native migration would move jobs to a durable queue, artifacts to object storage, processing to workers/containers, and state to a database.
+A future cloud-native migration would move jobs to a durable queue, artifacts to object storage, processing to workers or containers, and state to a database.
