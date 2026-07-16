@@ -183,11 +183,11 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                                     setBaseUrl(event.target.value);
                                     markDirty();
                                 }}
-                                placeholder="http://omniroute:20128/v1"
+                                placeholder="http://127.0.0.1:20128/v1"
                                 className="input-field font-mono"
                             />
                             <p className="mt-2 text-xs text-zinc-500">
-                                Use the Docker service name or <code>host.docker.internal</code>, not localhost.
+                                Use an endpoint reachable from the backend host, such as a localhost service or a secured HTTPS gateway.
                             </p>
                         </div>
 
@@ -208,12 +208,12 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                         </div>
 
                         <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed">
-                            <p className="font-semibold text-blue-300 mb-2">One-time OAuth login inside Docker</p>
-                            <code className="block overflow-x-auto rounded-lg bg-black/30 p-3 text-zinc-300">
-                                docker compose exec backend sh -lc 'NO_BROWSER=true gemini'
+                            <p className="font-semibold text-blue-300 mb-2">One-time OAuth login on the AWS server</p>
+                            <code className="block overflow-x-auto rounded-lg bg-black/30 p-3 text-zinc-300 whitespace-pre-wrap break-words">
+                                sudo -u openshorts -H env HOME=/var/lib/openshorts NO_BROWSER=true GOOGLE_GENAI_USE_GCA=true GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli gemini
                             </code>
                             <p className="mt-3 text-zinc-400">
-                                Follow the URL/code shown in the terminal. Credentials are stored in the persistent <code>gemini-cli-data</code> Docker volume.
+                                Run this once in an AWS Systems Manager or server terminal, then follow the URL/code shown. Credentials are stored under <code>/var/lib/openshorts/.gemini</code> for the native backend service.
                             </p>
                         </div>
                     </>
@@ -237,6 +237,7 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                             />
                             <button
                                 type="button"
+                                aria-label={isVisible ? 'Hide API key' : 'Show API key'}
                                 onClick={() => setIsVisible(!isVisible)}
                                 className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
                             >
