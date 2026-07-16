@@ -1,0 +1,68 @@
+name: Native AWS CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [cleanup/aws-native-codebase]
+
+permissions:
+  contents: read
+
+jobs:
+  provider-tests:
+    name: Provider unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install lightweight test dependencies
+        run: python -m pip install --upgrade pip httpx
+      - name: Run provider tests
+        env:
+          OPENSHORTS_SERVER_GEMINI_OAUTH: 'true'
+          HOME: /tmp/openshorts-ci-home
+          GEMINI_CLI_WORKING_DIR: /tmp/openshorts-ci-work
+          GEMINI_CLI_CREDENTIAL_DIR: /tmp/openshorts-ci-home/.gemini
+        run: |
+          python -m unittest \
+            tests/test_custom_ai_client.py \
+            tests/test_gemini_cli_oauth_client.py \
+            -v
+
+  frontend-build:
+    name: Frontend production build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: dashboard/package-lock.json
+      - name: Install frontend dependencies
+        run: npm --prefix dashboard ci
+      - name: Build frontend
+        run: npm --prefix dashboard run build
+
+  renderer-build:
+    name: Renderer TypeScript build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            render-service/package-lock.json
+            remotion/package-lock.json
+      - name: Install renderer dependencies
+        run: |
+          npm --prefix render-service ci
+          npm --prefix remotion ci
+      - name: Build renderer
+        run: npm --prefix render-service run build
