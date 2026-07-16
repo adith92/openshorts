@@ -6,6 +6,7 @@ import {
     EyeOff,
     Key,
     Server,
+    ShieldCheck,
     Terminal,
 } from 'lucide-react';
 
@@ -27,18 +28,27 @@ const decodeUtf8Base64 = (value) => {
 };
 
 const defaults = {
-    provider: 'gemini',
+    provider: 'gemini_cli_oauth',
     apiKey: '',
     baseUrl: '',
-    model: 'gemini-2.5-flash',
+    model: 'auto',
     temperature: '0.2',
     timeoutSeconds: '180',
     maxTokens: '4096',
 };
 
 const parseSavedValue = (savedKey) => {
-    if (!savedKey || !savedKey.startsWith(CONFIG_PREFIX)) {
-        return { ...defaults, apiKey: savedKey || '' };
+    if (!savedKey) {
+        return { ...defaults };
+    }
+
+    if (!savedKey.startsWith(CONFIG_PREFIX)) {
+        return {
+            ...defaults,
+            provider: 'gemini',
+            apiKey: savedKey,
+            model: 'gemini-2.5-flash',
+        };
     }
 
     try {
@@ -56,7 +66,7 @@ const parseSavedValue = (savedKey) => {
         };
     } catch (error) {
         console.warn('Could not read saved AI settings. Resetting the form.');
-        return { ...defaults, provider: 'openai_compatible', model: 'auto' };
+        return { ...defaults };
     }
 };
 
@@ -85,8 +95,8 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
     }, [savedKey]);
 
     const isCustom = provider === 'openai_compatible';
-    const isGeminiCli = provider === 'gemini_cli_oauth';
-    const requiresApiKey = !isGeminiCli;
+    const isServerOAuth = provider === 'gemini_cli_oauth';
+    const requiresApiKey = !isServerOAuth;
     const canSave = (
         (!requiresApiKey || apiKey.trim().length > 0)
         && (!isCustom || (baseUrl.trim().length > 0 && model.trim().length > 0))
@@ -98,13 +108,9 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
         const nextProvider = event.target.value;
         setProvider(nextProvider);
 
-        if (nextProvider === 'gemini' && ['', 'auto', 'default'].includes(model)) {
+        if (nextProvider === 'gemini') {
             setModel('gemini-2.5-flash');
-        }
-        if (
-            ['openai_compatible', 'gemini_cli_oauth'].includes(nextProvider)
-            && model === 'gemini-2.5-flash'
-        ) {
+        } else if (model === 'gemini-2.5-flash') {
             setModel('auto');
         }
         markDirty();
@@ -132,12 +138,14 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
             config.maxTokens = Number(maxTokens) || 4096;
         }
 
+        // Server OAuth stores only non-sensitive provider preferences here.
+        // Google OAuth credentials remain exclusively on the VPS filesystem.
         onKeySet(CONFIG_PREFIX + encodeUtf8Base64(JSON.stringify(config)));
         setIsSaved(true);
     };
 
-    const icon = isGeminiCli
-        ? <Terminal size={20} />
+    const icon = isServerOAuth
+        ? <ShieldCheck size={20} />
         : isCustom
             ? <Server size={20} />
             : <Key size={20} />;
@@ -162,12 +170,12 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                         onChange={handleProviderChange}
                         className="input-field"
                     >
+                        <option value="gemini_cli_oauth">
+                            Gemini OAuth — account stored on AWS server
+                        </option>
                         <option value="gemini">Google Gemini API Key</option>
                         <option value="openai_compatible">
                             OpenAI Compatible / Custom Endpoint
-                        </option>
-                        <option value="gemini_cli_oauth">
-                            Gemini CLI OAuth / Sign in with Google
                         </option>
                     </select>
                 </div>
@@ -200,20 +208,40 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                     </>
                 )}
 
-                {isGeminiCli && (
+                {isServerOAuth && (
                     <>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <Field label="Gemini CLI Model" value={model} setValue={setModel} dirty={markDirty} placeholder="auto" />
                             <Field label="Timeout (seconds)" value={timeoutSeconds} setValue={setTimeoutSeconds} dirty={markDirty} type="number" />
                         </div>
 
-                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed">
-                            <p className="font-semibold text-blue-300 mb-2">One-time OAuth login on the AWS server</p>
-                            <code className="block overflow-x-auto rounded-lg bg-black/30 p-3 text-zinc-300 whitespace-pre-wrap break-words">
-                                sudo -u openshorts -H env HOME=/var/lib/openshorts NO_BROWSER=true GOOGLE_GENAI_USE_GCA=true GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli gemini
-                            </code>
+                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs leading-relaxed">
+                            <div className="flex items-center gap-2 font-semibold text-emerald-300 mb-2">
+                                <ShieldCheck size={16} /> Persistent server-owned Google login
+                            </div>
+                            <p className="text-zinc-300">
+                                Your Google OAuth session is stored on the private AWS VPS under the Linux service account <code>openshorts</code>. The browser stores only the non-secret model and timeout selection.
+                            </p>
                             <p className="mt-3 text-zinc-400">
-                                Run this once in an AWS Systems Manager or server terminal, then follow the URL/code shown. Credentials are stored under <code>/var/lib/openshorts/.gemini</code> for the native backend service.
+                                Login is required only once per server, or again if Google revokes or expires the session.
+                            </p>
+                        </div>
+
+                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed">
+                            <div className="flex items-center gap-2 font-semibold text-blue-300 mb-2">
+                                <Terminal size={16} /> One-time login through AWS Systems Manager
+                            </div>
+                            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 text-zinc-300 font-mono">
+{`sudo -u openshorts -H env \\
+  HOME=/var/lib/openshorts \\
+  NO_BROWSER=true \\
+  GOOGLE_GENAI_USE_GCA=true \\
+  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \\
+  GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli \\
+  /usr/local/bin/gemini`}
+                            </pre>
+                            <p className="mt-3 text-zinc-400">
+                                Follow the URL/code shown in the terminal. Credentials remain in <code>/var/lib/openshorts/.gemini</code> on persistent EBS storage.
                             </p>
                         </div>
                     </>
@@ -258,16 +286,16 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                                 : 'bg-primary hover:bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed'
                         }`}
                     >
-                        {isSaved ? <><Check size={18} /> Ready</> : 'Save AI'}
+                        {isSaved ? <><Check size={18} /> Ready</> : isServerOAuth ? 'Use Server OAuth' : 'Save AI'}
                     </button>
                 </div>
             </div>
 
-            {(isCustom || isGeminiCli) && (
+            {(isCustom || isServerOAuth) && (
                 <div className="mt-4 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 flex gap-2 text-xs text-amber-200/80">
                     <AlertTriangle size={16} className="text-amber-400 shrink-0" />
                     <span>
-                        This provider covers text-based clipping analysis. Direct Gemini Files API video uploads still require the Gemini API provider.
+                        This provider covers text-based clipping analysis. Direct Gemini Files API video uploads still require the regular Gemini API provider and an API key.
                     </span>
                 </div>
             )}
