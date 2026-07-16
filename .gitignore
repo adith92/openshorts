@@ -4,39 +4,64 @@
 *.mov
 *.mkv
 
-# YOLO model
+# YOLO and ML model files
 *.pt
 
-# Python virtual environment
+# Python environments and caches
 .venv/
+venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Temporary files / runtime dirs
+# Node dependencies and generated builds
+node_modules/
+dashboard/node_modules/
+dashboard/dist/
+render-service/node_modules/
+render-service/dist/
+remotion/node_modules/
+
+# Temporary files and runtime data
 temp_*
 uploads/
 downloads/
 videos/
 output/
+*.log
 
-# OS / IDE
+# Local deployment state and reports
+.deploy/
+reports/
+
+# Gemini CLI credentials and local auth state
+.gemini/
+
+# OS and IDE
 .DS_Store
+Thumbs.db
 .idea/
 .vscode/
 
 # Secrets
 .env
+.env.*
+!.env.example
+*.pem
+*.key
 
 # Generated metadata
 *_metadata.json
 
-# Cache dirs
+# Cache directories
 .cache/
 .config/
-# Multi-agent Skills
+
+# Multi-agent skills
 .agents/
 .agent/
 .claude/
 skills/
 skills-lock.json
-
