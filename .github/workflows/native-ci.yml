@@ -57,12 +57,10 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: |
-            render-service/package-lock.json
-            remotion/package-lock.json
-      - name: Install renderer dependencies
-        run: |
-          npm --prefix render-service ci
-          npm --prefix remotion ci
+          cache-dependency-path: render-service/package-lock.json
+      - name: Install renderer service dependencies
+        run: npm --prefix render-service ci
+      - name: Install Remotion composition dependencies
+        run: npm --prefix remotion install --no-audit --no-fund
       - name: Build renderer
         run: npm --prefix render-service run build
