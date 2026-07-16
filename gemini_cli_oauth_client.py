@@ -262,9 +262,13 @@ class GeminiCliOAuthClient:
                 )
             ):
                 raise GeminiCliOAuthError(
-                    "Gemini CLI OAuth is not authenticated inside the backend "
-                    "container. Run: docker compose exec backend sh -lc "
-                    "'NO_BROWSER=true gemini'"
+                    "Gemini CLI OAuth is not authenticated for the OpenShorts service user.\n"
+                    "Run on the EC2 host:\n"
+                    "sudo -u openshorts -H env \\\n"
+                    "  HOME=/var/lib/openshorts \\\n"
+                    "  NO_BROWSER=true \\\n"
+                    "  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \\\n"
+                    "  gemini"
                 )
 
             raise GeminiCliOAuthError(

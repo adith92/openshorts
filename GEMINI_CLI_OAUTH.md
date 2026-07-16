@@ -10,7 +10,7 @@ The OAuth implementation uses the official `@google/gemini-cli` package. OpenSho
 
 ## Why this design
 
-OpenShorts does not copy, parse, or expose Gemini CLI refresh tokens. The official CLI owns the complete OAuth flow and stores its credentials in a persistent Docker volume.
+OpenShorts does not copy, parse, or expose Gemini CLI refresh tokens. The official CLI owns the complete OAuth flow and stores its credentials persistently.
 
 The clipping flow is:
 
@@ -23,42 +23,26 @@ OpenShorts transcript prompt
   -> OpenShorts clip generation
 ```
 
-## Build
+## Native AWS/Systemd Deployment (Primary)
 
-Checkout the feature branch and rebuild the backend image:
+In a native deployment, the Gemini CLI runs under the `openshorts` service user on the EC2 instance.
 
-```bash
-git fetch origin
-git switch feat/custom-ai-endpoint
-docker compose build --no-cache backend
-docker compose up -d
-```
+### One-time Google OAuth login
 
-Verify Gemini CLI is installed:
+Run the following on the EC2 host:
 
 ```bash
-docker compose exec backend gemini --version
-```
-
-## One-time Google OAuth login
-
-Run:
-
-```bash
-docker compose exec backend sh -lc 'NO_BROWSER=true gemini'
+sudo -u openshorts -H env \
+  HOME=/var/lib/openshorts \
+  NO_BROWSER=true \
+  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \
+  gemini
 ```
 
 The CLI prints a URL and authorization code. Open the URL in your browser, sign in to Google, and complete the flow.
+The OAuth credentials are stored in `/var/lib/openshorts/.gemini` and survive backend restarts.
 
-OAuth credentials are stored in the named volume:
-
-```text
-gemini-cli-data
-```
-
-They survive normal container rebuilds and restarts.
-
-## Configure OpenShorts
+### Configure OpenShorts
 
 1. Open **Settings**.
 2. Choose **Gemini CLI OAuth / Sign in with Google**.
@@ -66,63 +50,47 @@ They survive normal container rebuilds and restarts.
 4. Click **Save AI**.
 5. Run Clip Generator normally.
 
-`auto` omits the Gemini CLI `--model` flag, allowing the CLI to select its current default model.
+### Test OAuth natively
 
-## Test OAuth inside Docker
+```bash
+sudo -u openshorts -H env \
+  HOME=/var/lib/openshorts \
+  NO_BROWSER=true \
+  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \
+  gemini \
+  -p "Reply with exactly OPENSHORTS_OK" \
+  --output-format json \
+  --approval-mode plan \
+  --skip-trust
+```
+
+## Docker Deployment (Legacy / Local)
+
+If you are running the legacy Docker Compose environment locally, you can use `docker compose exec`.
+
+### One-time Google OAuth login (Docker)
+
+```bash
+docker compose exec backend sh -lc 'NO_BROWSER=true gemini'
+```
+
+OAuth credentials are stored in the named volume `gemini-cli-data`.
+
+### Test OAuth (Docker)
 
 ```bash
 docker compose exec backend sh -lc \
   'gemini -p "Reply with exactly OPENSHORTS_OK" --output-format json --approval-mode plan --skip-trust'
 ```
 
-Expected output includes:
-
-```json
-{
-  "response": "OPENSHORTS_OK"
-}
-```
-
-## Security behavior
-
-- No OAuth token is stored in the browser.
-- No OAuth token is included in OpenShorts job metadata.
-- Gemini CLI runs with `--approval-mode plan`.
-- Gemini CLI uses a dedicated empty working directory.
-- The OAuth volume should not be exposed to untrusted users.
-- This mode is intended for local and private self-hosted deployments.
-
-## Limitations
-
-Gemini CLI OAuth currently covers text-based tasks such as:
-
-- viral moment detection from transcripts
-- timestamp selection
-- hook text
-- titles and descriptions
-
-It does not expose the Gemini Files API used by features that directly upload video files to Gemini. Use the regular Gemini API provider for those operations.
-
-## Reset OAuth
-
-To remove only the stored Gemini CLI credentials:
+### Reset OAuth (Docker)
 
 ```bash
 docker compose down
 docker volume rm openshorts_gemini-cli-data
 ```
 
-The exact volume prefix may differ depending on the Compose project name. Check it with:
+## Limitations
 
-```bash
-docker volume ls | grep gemini-cli-data
-```
-
-## Run tests
-
-```bash
-python -m unittest \
-  tests/test_custom_ai_client.py \
-  tests/test_gemini_cli_oauth_client.py \
-  -v
-```
+Gemini CLI OAuth currently covers text-based tasks such as viral moment detection from transcripts.
+It does not expose the Gemini Files API. Use the regular Gemini API provider for those operations.

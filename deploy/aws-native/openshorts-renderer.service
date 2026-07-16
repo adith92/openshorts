@@ -1,0 +1,27 @@
+[Unit]
+Description=OpenShorts Remotion Renderer
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=openshorts
+Group=openshorts
+WorkingDirectory=/opt/openshorts/render-service
+EnvironmentFile=/etc/openshorts/openshorts.env
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+Environment=PORT=3100
+Environment=OUTPUT_DIR=/var/lib/openshorts/output
+Environment=REMOTION_BUNDLE_PATH=/opt/openshorts/remotion
+ExecStart=/usr/bin/node /opt/openshorts/render-service/dist/server.js
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+TimeoutStopSec=60
+NoNewPrivileges=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/openshorts /opt/openshorts
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

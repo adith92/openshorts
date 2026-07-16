@@ -17,27 +17,18 @@ def upload_file_to_s3(file_path, bucket_name, s3_key):
     """
     Upload a file to an S3 bucket silently.
     """
-    access_key = os.environ.get('AWS_ACCESS_KEY_ID')
-    secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    region = os.environ.get('AWS_REGION', 'eu-west-3')
-
-    if not access_key or not secret_key:
+    s3_client = get_s3_client()
+    if not s3_client:
         return False
 
-    s3_client = boto3.client(
-        's3',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name=region
-    )
     try:
-        # Extra arguments for public read if needed, but the user didn't specify.
-        # Given the bucket name, it might be for a web app.
         s3_client.upload_file(file_path, bucket_name, s3_key)
         return True
-    except ClientError:
+    except ClientError as e:
+        logger.error(f"S3 ClientError: {e}")
         return False
-    except Exception:
+    except Exception as e:
+        logger.error(f"S3 Exception: {e}")
         return False
 
 
@@ -54,20 +45,21 @@ CACHE_TTL_SECONDS = 300  # 5 minutes
 
 def get_s3_client():
     """Returns an authenticated S3 client."""
+    region = os.environ.get('AWS_REGION', 'ap-southeast-3')
+
+    client_kwargs = {
+        "region_name": region,
+        "config": Config(signature_version="s3v4"),
+    }
+
     access_key = os.environ.get('AWS_ACCESS_KEY_ID')
     secret_key = os.environ.get('AWS_SECRET_ACCESS_KEY')
-    region = os.environ.get('AWS_REGION', 'eu-west-3')
 
-    if not access_key or not secret_key:
-        return None
+    if access_key and secret_key:
+        client_kwargs["aws_access_key_id"] = access_key
+        client_kwargs["aws_secret_access_key"] = secret_key
 
-    return boto3.client(
-        's3',
-        aws_access_key_id=access_key,
-        aws_secret_access_key=secret_key,
-        region_name=region,
-        config=Config(signature_version='s3v4')
-    )
+    return boto3.client('s3', **client_kwargs)
 
 def generate_presigned_url(bucket_name, object_key, expiration=3600):
     """Generate a presigned URL to share an S3 object."""

@@ -20,8 +20,8 @@ from s3_uploader import upload_job_artifacts, list_all_clips, upload_actor_to_s3
 load_dotenv()
 
 # Constants
-UPLOAD_DIR = "uploads"
-OUTPUT_DIR = "output"
+UPLOAD_DIR = os.environ.get("UPLOAD_DIR", "uploads")
+OUTPUT_DIR = os.environ.get("OUTPUT_DIR", "output")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
 
@@ -312,6 +312,15 @@ async def run_job(job_id, job_data):
 @app.get("/api/config")
 async def get_config():
     return {"youtubeUrlEnabled": not DISABLE_YOUTUBE_URL}
+
+@app.get("/api/health")
+async def get_health():
+    return {
+        "status": "ok",
+        "backend": True,
+        "rendererConfigured": True,
+        "outputWritable": os.access(OUTPUT_DIR, os.W_OK)
+    }
 
 @app.post("/api/process")
 async def process_endpoint(
