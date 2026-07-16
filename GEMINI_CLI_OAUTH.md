@@ -137,7 +137,7 @@ No Gemini key is requested for this mode.
 - Browser configuration cannot override the Gemini binary.
 - Browser configuration cannot override the Gemini working directory.
 - Gemini CLI executes with `--approval-mode plan` and `--skip-trust`.
-- Prompts are passed directly as command arguments to the official CLI.
+- Prompts are sent through standard input so long transcripts are not exposed in process arguments.
 - The backend returns only generated text, not credential data.
 - Do not expose the VPS to untrusted users without adding application authentication and rate limiting.
 
@@ -180,5 +180,6 @@ Remove the backup only after the new account succeeds in a real clipping job.
 python -m unittest \
   tests/test_custom_ai_client.py \
   tests/test_gemini_cli_oauth_client.py \
+  tests/test_native_aws_deployment.py \
   -v
 ```

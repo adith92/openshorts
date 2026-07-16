@@ -48,7 +48,7 @@
           "description": "Free open source clip generator that turns your long-form videos into viral TikTok, Instagram Reels & YouTube Shorts automatically with AI-powered viral moment detection, smart cropping, and a free AI YouTube thumbnail studio.",
           "url": "https://openshorts.app",
           "datePublished": "2024-06-01",
-          "dateModified": "2026-03-20",
+          "dateModified": "2026-07-16",
           "inLanguage": "en-US",
           "speakable": {
             "@type": "SpeakableSpecification",
@@ -61,14 +61,14 @@
           "alternateName": "OpenShorts Free Clip Generator",
           "description": "Free open source AI clip generator. Transforms your long-form videos into viral-ready short clips for TikTok, Instagram Reels, and YouTube Shorts using Google Gemini AI. Includes free AI YouTube thumbnail generator, title suggestions, description writer, and direct YouTube publishing.",
           "applicationCategory": "MultimediaApplication",
-          "operatingSystem": "Cross-platform (Docker)",
+          "operatingSystem": "Linux",
           "url": "https://openshorts.app",
-          "downloadUrl": "https://github.com/mutonby/openshorts",
+          "downloadUrl": "https://github.com/adith92/openshorts",
           "softwareVersion": "2.0",
           "screenshot": "https://openshorts.app/og-image.png",
           "featureList": [
             "Free AI clip generator with viral moment detection",
-            "Open source clip generator — self-hosted with Docker",
+            "Open source clip generator — self-hosted on a native Linux VPS",
             "AI viral moment detection with Google Gemini 3.0 Flash",
             "Smart 9:16 vertical cropping with face tracking",
             "Automatic subtitle generation with word-level timestamps",
@@ -86,7 +86,7 @@
             "Shared AI avatar gallery",
             "Public video gallery with SEO pages",
             "S3 cloud backup",
-            "Self-hosted Docker deployment"
+            "Native AWS deployment with systemd and Nginx"
           ],
           "offers": {
             "@type": "Offer",
@@ -124,7 +124,7 @@
               "name": "Is OpenShorts really free? What's the catch?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "OpenShorts is 100% free and open source. You self-host it using Docker on your own machine or server. It uses three external APIs — all with free tiers. Google Gemini API (required) powers AI analysis, viral moment detection, and thumbnail generation — free tier includes 1,500 requests per day. ElevenLabs API (optional) enables AI voice dubbing in 30+ languages — free tier included. Upload-Post API (optional) allows direct publishing to YouTube, TikTok, and Instagram — also free tier. There are no watermarks, no usage limits, and no subscription fees."
+                "text": "OpenShorts is 100% free and open source. You self-host it natively on your own Linux AWS VPS. It uses three external APIs — all with free tiers. Google Gemini powers AI analysis, viral moment detection, and thumbnail generation through server OAuth or an API key. ElevenLabs API (optional) enables AI voice dubbing in 30+ languages — free tier included. Upload-Post API (optional) allows direct publishing to YouTube, TikTok, and Instagram — also free tier. There are no watermarks, no usage limits, and no subscription fees."
               }
             },
             {
@@ -164,7 +164,7 @@
               "name": "Is there a free open source clip generator?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Yes — OpenShorts is a 100% free, open source clip generator. Unlike paid clip generators like Opus Clip ($15-228/month) or Kapwing ($24-79/month), OpenShorts lets you generate unlimited clips with no watermarks, no usage limits, and no subscription fees. It also includes a free AI YouTube thumbnail generator, free AI YouTube title generator, and free AI YouTube description generator — features that other clip generators charge extra for. You self-host it with Docker on your own machine for full privacy and control."
+                "text": "Yes — OpenShorts is a 100% free, open source clip generator. Unlike paid clip generators like Opus Clip ($15-228/month) or Kapwing ($24-79/month), OpenShorts lets you generate unlimited clips with no watermarks, no usage limits, and no subscription fees. It also includes a free AI YouTube thumbnail generator, free AI YouTube title generator, and free AI YouTube description generator — features that other clip generators charge extra for. You self-host the native services on your own AWS VPS for privacy and control."
               }
             }
           ]
@@ -175,7 +175,7 @@
           "url": "https://openshorts.app",
           "logo": "https://openshorts.app/logo-openshorts.png",
           "sameAs": [
-            "https://github.com/mutonby/openshorts"
+            "https://github.com/adith92/openshorts"
           ]
         }
       ]

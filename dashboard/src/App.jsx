@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Upload, FileVideo, Sparkles, Youtube, Instagram, Share2, LogOut, ChevronDown, Check, Activity, LayoutDashboard, Settings, PlusCircle, History, Menu, X, Terminal, Shield, LayoutGrid, Image, Globe, RotateCcw, Calendar, AlertTriangle, KeyRound, Bot, Users, Smartphone, ExternalLink, Copy, CheckCircle2 } from 'lucide-react';
 import KeyInput from './components/KeyInput';
 import MediaInput from './components/MediaInput';
@@ -228,7 +228,7 @@ function App() {
     } catch (e) {
       // localStorage full or serialization error - ignore
     }
-  }, [jobId, status, results, activeTab]);
+  }, [jobId, status, results, processingMedia, activeTab]);
 
   useEffect(() => {
     // Encrypt Gemini Key too for consistency if desired, but user asked specifically about Social integration not saving well.
@@ -256,12 +256,6 @@ function App() {
       localStorage.setItem('falKey_v1', encrypt(falKey));
     }
   }, [falKey]);
-
-  useEffect(() => {
-    if (uploadPostKey && userProfiles.length === 0) {
-      fetchUserProfiles();
-    }
-  }, [uploadPostKey]);
 
   useEffect(() => {
     let interval;
@@ -297,7 +291,7 @@ function App() {
   }, [status, jobId]);
 
 
-  const fetchUserProfiles = async () => {
+  const fetchUserProfiles = useCallback(async () => {
     if (!uploadPostKey) return;
     try {
       const res = await fetch(getApiUrl('/api/social/user'), {
@@ -318,7 +312,13 @@ function App() {
       alert("Error fetching User Profiles. Please check key.");
       console.error(e);
     }
-  };
+  }, [uploadPostKey, uploadUserId]);
+
+  useEffect(() => {
+    if (uploadPostKey && userProfiles.length === 0) {
+      fetchUserProfiles();
+    }
+  }, [fetchUserProfiles, uploadPostKey, userProfiles.length]);
 
   const handleProcess = async (data) => {
     if (!apiKey || !uploadPostKey) {

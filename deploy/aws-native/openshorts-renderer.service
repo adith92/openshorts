@@ -10,10 +10,9 @@ Group=openshorts
 WorkingDirectory=/opt/openshorts/render-service
 EnvironmentFile=/etc/openshorts/openshorts.env
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
-Environment=PORT=3100
 Environment=OUTPUT_DIR=/var/lib/openshorts/output
 Environment=REMOTION_BUNDLE_PATH=/opt/openshorts/remotion
-ExecStart=/usr/bin/node /opt/openshorts/render-service/dist/server.js
+ExecStart=/usr/bin/env HOST=127.0.0.1 PORT=3100 /usr/bin/node /opt/openshorts/render-service/dist/server.js
 Restart=on-failure
 RestartSec=5
 TimeoutStartSec=300

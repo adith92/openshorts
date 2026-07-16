@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import { Globe, Sparkles, Download, Copy, Check, ChevronRight, ChevronLeft, Loader2, AlertCircle, Volume2, User, Film, Terminal, ChevronDown, RefreshCw, Zap, Target, TrendingUp, MessageSquare, Eye, Share2, Calendar, Upload } from 'lucide-react';
 import { getApiUrl } from '../config';
 
@@ -70,8 +70,6 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
   const [actorGallery, setActorGallery] = useState([]);
   const [loadingGallery, setLoadingGallery] = useState(false);
   const [uploadedActorPreview, setUploadedActorPreview] = useState(null); // {localPreview, serverUrl}
-  const [productPhoto, setProductPhoto] = useState(null); // {preview, serverUrl}
-  const [productDescription, setProductDescription] = useState('');
 
   // Step 3: Generate
   const [generating, setGenerating] = useState(false);
@@ -97,7 +95,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
       setActorDescription(scripts[0].actor_description || '');
       setEditedNarration(scripts[0].full_narration || '');
     }
-  }, []);
+  }, [actorDescription, fromCache, scripts]);
 
   // Fetch actor gallery on mount
   useEffect(() => {
@@ -108,13 +106,6 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
       .catch(() => {})
       .finally(() => setLoadingGallery(false));
   }, []);
-
-  // Fetch voices on mount
-  useEffect(() => {
-    if (elevenLabsKey) {
-      fetchVoices();
-    }
-  }, [elevenLabsKey]);
 
   // Reset selected voice when actor gender changes
   useEffect(() => {
@@ -131,7 +122,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     } else {
       setSelectedVoice(genderDefaults[`${language}-${actorGender}`] || genderDefaults['en-female']);
     }
-  }, [actorGender, language]);
+  }, [actorGender, language, voices]);
 
   // Poll generation status
   useEffect(() => {
@@ -170,7 +161,7 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     return () => clearInterval(interval);
   }, [jobId, genStatus]);
 
-  const fetchVoices = async () => {
+  const fetchVoices = useCallback(async () => {
     try {
       const res = await fetch(getApiUrl('/api/saasshorts/voices'), {
         headers: { 'X-ElevenLabs-Key': elevenLabsKey },
@@ -182,7 +173,14 @@ export default function SaaShortsTab({ geminiApiKey, elevenLabsKey, falKey, uplo
     } catch (e) {
       console.error('Voices fetch error:', e);
     }
-  };
+  }, [elevenLabsKey]);
+
+  // Fetch voices when credentials change.
+  useEffect(() => {
+    if (elevenLabsKey) {
+      fetchVoices();
+    }
+  }, [elevenLabsKey, fetchVoices]);
 
   const handleAnalyze = async () => {
     if (!url.trim() && !description.trim()) return;

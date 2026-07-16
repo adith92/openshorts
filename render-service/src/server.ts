@@ -44,9 +44,10 @@ const app = express();
 app.use(express.json({ limit: "10mb" }));
 
 const PORT = parseInt(process.env.PORT || "3100", 10);
+const HOST = process.env.HOST || "127.0.0.1";
 const OUTPUT_DIR = process.env.OUTPUT_DIR || "/output";
 
-// Serve video files from the shared output volume so Remotion can access them via HTTP
+// Serve video files from persistent host storage so Remotion can access them via HTTP
 app.use("/output", express.static(OUTPUT_DIR));
 
 // Health check
@@ -84,7 +85,7 @@ app.post("/render", (req, res) => {
   );
 
   // Resolve video URL: convert frontend/backend URLs to renderer's own static server
-  // The renderer serves /output/* from the shared Docker volume
+  // The renderer serves /output/* from persistent host storage.
   let resolvedVideoUrl = props.videoUrl;
   const videoPathMatch = props.videoUrl.match(/\/videos\/([^/]+)\/(.+)$/);
   if (videoPathMatch) {
@@ -155,8 +156,8 @@ async function main() {
   await initBundle();
   console.log("[render-service] Bundle ready.");
 
-  app.listen(PORT, () => {
-    console.log(`[render-service] Listening on port ${PORT}`);
+  app.listen(PORT, HOST, () => {
+    console.log(`[render-service] Listening on ${HOST}:${PORT}`);
   });
 }
 

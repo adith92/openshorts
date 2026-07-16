@@ -18,6 +18,20 @@ _GEMINI_CLI_PROVIDERS = {
     "gemini-cli",
 }
 _TRUE_VALUES = {"1", "true", "yes", "on", "enabled"}
+_AUTH_ERROR_MARKERS = (
+    "authentication required",
+    "not authenticated",
+    "please authenticate",
+    "sign in with google",
+    "please sign in",
+    "login required",
+    "oauth session expired",
+    "oauth session missing",
+    "credentials expired",
+    "credentials missing",
+    "invalid credentials",
+    "no credentials",
+)
 
 
 class GeminiCliOAuthError(RuntimeError):
@@ -63,6 +77,11 @@ def _credential_files_exist(directory: Path) -> bool:
         return directory.is_dir() and any(path.is_file() for path in directory.rglob("*"))
     except OSError:
         return False
+
+
+def _looks_like_auth_error(*values: Any) -> bool:
+    combined = "\n".join(str(value) for value in values if value).lower()
+    return any(marker in combined for marker in _AUTH_ERROR_MARKERS)
 
 
 def get_gemini_cli_oauth_status() -> dict[str, Any]:
@@ -214,23 +233,28 @@ def _contents_to_text(contents: Any) -> str:
     raise GeminiCliOAuthError("Unsupported Gemini CLI OAuth request content.")
 
 
+def _try_load_json(text: str) -> Any:
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        return None
+
+
 def _extract_json_object(text: str) -> dict[str, Any]:
     cleaned = text.strip()
-    try:
-        value = json.loads(cleaned)
-    except json.JSONDecodeError:
+    value = _try_load_json(cleaned)
+    if value is None:
         start = cleaned.find("{")
         end = cleaned.rfind("}")
         if start < 0 or end <= start:
             raise GeminiCliOAuthError(
                 "Gemini CLI did not return valid JSON output."
             )
-        try:
-            value = json.loads(cleaned[start : end + 1])
-        except json.JSONDecodeError as exc:
+        value = _try_load_json(cleaned[start : end + 1])
+        if value is None:
             raise GeminiCliOAuthError(
                 "Gemini CLI did not return valid JSON output."
-            ) from exc
+            )
 
     if not isinstance(value, dict):
         raise GeminiCliOAuthError(
@@ -305,7 +329,7 @@ class GeminiCliOAuthClient:
         command = [
             binary,
             "-p",
-            prompt,
+            "",
             "--output-format",
             "json",
             "--approval-mode",
@@ -321,61 +345,57 @@ class GeminiCliOAuthClient:
         environment.setdefault("GEMINI_FORCE_ENCRYPTED_FILE_STORAGE", "true")
         environment.setdefault("NO_BROWSER", "true")
 
+        result: subprocess.CompletedProcess[str] | None = None
+        run_error: OSError | None = None
         try:
             result = subprocess.run(
                 command,
                 cwd=self.config.working_directory,
                 env=environment,
+                input=prompt,
                 capture_output=True,
                 text=True,
                 timeout=self.config.timeout_seconds,
                 check=False,
             )
-        except subprocess.TimeoutExpired as exc:
+        except subprocess.TimeoutExpired:
+            pass
+        except OSError as exc:
+            run_error = exc
+
+        if run_error is not None:
+            raise GeminiCliOAuthError(
+                f"Could not start Gemini CLI: {run_error}"
+            ) from run_error
+
+        if result is None:
             raise GeminiCliOAuthError(
                 "Gemini CLI OAuth request timed out."
-            ) from exc
-        except OSError as exc:
-            raise GeminiCliOAuthError(
-                f"Could not start Gemini CLI: {exc}"
-            ) from exc
+            )
 
         if result.returncode != 0:
-            error_text = (result.stderr or result.stdout or "").strip()[-1200:]
-            lowered = error_text.lower()
-
-            if any(
-                marker in lowered
-                for marker in (
-                    "authenticate",
-                    "authentication",
-                    "sign in",
-                    "login",
-                    "oauth",
-                    "credentials",
-                )
-            ):
+            if _looks_like_auth_error(result.stderr, result.stdout):
                 raise GeminiCliOAuthError(
                     "The Gemini OAuth session on the VPS is missing or expired. "
                     "Run the one-time login again as the openshorts service user."
                 )
 
             raise GeminiCliOAuthError(
-                f"Gemini CLI request failed with exit code "
-                f"{result.returncode}: {error_text or 'No error output'}"
+                f"Gemini CLI request failed with exit code {result.returncode}. "
+                "Verify the CLI installation and persistent OAuth session on the VPS."
             )
 
         payload = _extract_json_object(result.stdout)
 
         if payload.get("error"):
-            error = payload["error"]
-            message = (
-                str(error.get("message") or error)
-                if isinstance(error, dict)
-                else str(error)
-            )
+            if _looks_like_auth_error(payload["error"]):
+                raise GeminiCliOAuthError(
+                    "The Gemini OAuth session on the VPS is missing or expired. "
+                    "Run the one-time login again as the openshorts service user."
+                )
             raise GeminiCliOAuthError(
-                f"Gemini CLI returned an error: {message[:1000]}"
+                "Gemini CLI returned an error. Verify the CLI installation, "
+                "model selection, and persistent OAuth session on the VPS."
             )
 
         response_text = payload.get("response")

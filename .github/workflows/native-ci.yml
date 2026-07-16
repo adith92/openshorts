@@ -31,6 +31,7 @@ jobs:
           python -m unittest \
             tests/test_custom_ai_client.py \
             tests/test_gemini_cli_oauth_client.py \
+            tests/test_native_aws_deployment.py \
             -v
 
   frontend-build:
@@ -61,6 +62,6 @@ jobs:
       - name: Install renderer service dependencies
         run: npm --prefix render-service ci
       - name: Install Remotion composition dependencies
-        run: npm --prefix remotion install --no-audit --no-fund
+        run: npm --prefix remotion ci --no-audit --no-fund
       - name: Build renderer
         run: npm --prefix render-service run build

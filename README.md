@@ -187,7 +187,7 @@ Serve `dashboard/dist` through Nginx.
 
 ```bash
 npm --prefix render-service ci
-npm --prefix remotion install --no-audit --no-fund
+npm --prefix remotion ci --no-audit --no-fund
 npm --prefix render-service run build
 
 PORT=3100 \
@@ -217,6 +217,7 @@ Provider tests:
 python -m unittest \
   tests/test_custom_ai_client.py \
   tests/test_gemini_cli_oauth_client.py \
+  tests/test_native_aws_deployment.py \
   -v
 ```
 
@@ -231,7 +232,7 @@ Renderer build:
 
 ```bash
 npm --prefix render-service ci
-npm --prefix remotion install --no-audit --no-fund
+npm --prefix remotion ci --no-audit --no-fund
 npm --prefix render-service run build
 ```
 

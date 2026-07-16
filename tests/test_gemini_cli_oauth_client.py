@@ -154,6 +154,11 @@ class GeminiCliOAuthClientTests(unittest.TestCase):
         self.assertIn("--approval-mode", command)
         self.assertIn("plan", command)
         self.assertNotIn("--model", command)
+        self.assertEqual(command[command.index("-p") + 1], "")
+        self.assertEqual(
+            run_mock.call_args.kwargs["input"],
+            "RETURN ONLY VALID JSON",
+        )
 
     @patch("gemini_cli_oauth_client._credential_files_exist", return_value=False)
     @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
@@ -191,6 +196,193 @@ class GeminiCliOAuthClientTests(unittest.TestCase):
             "session on the VPS is missing or expired",
         ):
             client.models.generate_content(contents="hello")
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_does_not_expose_cli_error_output(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="",
+            stderr="upstream failure bearer super-secret-value",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertNotIn("super-secret-value", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_does_not_expose_json_error_payload(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps(
+                {"error": {"message": "bearer super-secret-json-value"}}
+            ),
+            stderr="",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertNotIn("super-secret-json-value", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_timeout_does_not_retain_cli_output(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.side_effect = subprocess.TimeoutExpired(
+            cmd=["gemini"],
+            timeout=30,
+            output="super-secret-timeout-output",
+            stderr="super-secret-timeout-error",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertIsNone(raised.exception.__cause__)
+        self.assertIsNone(raised.exception.__context__)
+        self.assertNotIn("super-secret", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_auth_error_in_stdout_is_actionable_when_stderr_has_warning(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="Authentication required. Sign in with Google.",
+            stderr="Node emitted a warning.",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaisesRegex(
+            GeminiCliOAuthError,
+            "session on the VPS is missing or expired",
+        ):
+            client.models.generate_content(contents="hello")
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_malformed_json_does_not_retain_cli_output(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout="not-json super-secret-invalid-output",
+            stderr="",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertIsNone(raised.exception.__context__)
+        self.assertNotIn("super-secret-invalid-output", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_oauth_words_do_not_misclassify_non_auth_failure(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="OAuth credentials loaded; requested model is unavailable.",
+            stderr="",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertNotIn("missing or expired", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_assign_input_error_is_not_misclassified_as_sign_in_failure(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=1,
+            stdout="Failed to assign input buffer.",
+            stderr="",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaises(GeminiCliOAuthError) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertNotIn("missing or expired", str(raised.exception))
+
+    @patch("gemini_cli_oauth_client._credential_files_exist", return_value=True)
+    @patch("gemini_cli_oauth_client.shutil.which", return_value="/usr/local/bin/gemini")
+    @patch("gemini_cli_oauth_client.subprocess.run")
+    def test_json_auth_error_returns_safe_relogin_instruction(
+        self,
+        run_mock,
+        _which_mock,
+        _credential_mock,
+    ):
+        run_mock.return_value = subprocess.CompletedProcess(
+            args=[],
+            returncode=0,
+            stdout=json.dumps(
+                {"error": {"message": "Authentication required secret-value"}}
+            ),
+            stderr="",
+        )
+
+        client = GeminiCliOAuthClient(self.config)
+        with self.assertRaisesRegex(
+            GeminiCliOAuthError,
+            "session on the VPS is missing or expired",
+        ) as raised:
+            client.models.generate_content(contents="hello")
+
+        self.assertNotIn("secret-value", str(raised.exception))
 
 
 if __name__ == "__main__":
