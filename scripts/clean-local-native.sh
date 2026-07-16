@@ -8,7 +8,7 @@ Usage:
   scripts/clean-local-native.sh --apply     # remove generated build/cache artifacts
   scripts/clean-local-native.sh --apply --purge-runtime
 
-The script never deletes .env, Gemini OAuth credentials, Git changes, or runtime media
+The script never deletes .env files, Git changes, API credentials, or runtime media
 unless --purge-runtime is explicitly supplied. Runtime data is archived before removal.
 EOF
 }
@@ -87,9 +87,9 @@ find . -type f \( -name '*.pyc' -o -name '*.pyo' -o -name '*.log' \) -print > "$
 echo
 echo "Protected paths that are never deleted by the normal cleanup:"
 echo "  .env and .env.*"
-echo "  .gemini and OAuth credentials"
 echo "  tracked or untracked source files"
 echo "  uploads/downloads/videos/output"
+echo "  endpoint API keys and other user credentials"
 
 if [[ "$APPLY" != true ]]; then
   echo
@@ -135,7 +135,7 @@ echo "Next validation commands:"
 echo "  python3.11 -m venv .venv"
 echo "  . .venv/bin/activate"
 echo "  pip install -r requirements.txt"
-echo "  python -m unittest tests/test_custom_ai_client.py tests/test_gemini_cli_oauth_client.py -v"
+echo "  python -m unittest tests/test_custom_ai_client.py tests/test_native_aws_deployment.py -v"
 echo "  npm --prefix dashboard ci && npm --prefix dashboard run build"
 echo "  npm --prefix render-service ci && npm --prefix render-service run build"
-echo "  npm --prefix remotion install --no-audit --no-fund"
+echo "  npm --prefix remotion ci --no-audit --no-fund"

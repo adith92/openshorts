@@ -14,7 +14,6 @@ The helper:
 
 - creates the dedicated Linux account `openshorts` when needed;
 - creates persistent runtime directories under `/var/lib/openshorts`;
-- creates the protected Gemini credential directory;
 - links `/opt/openshorts/uploads` and `/opt/openshorts/output` to persistent storage;
 - archives non-empty legacy runtime directories instead of deleting them.
 
@@ -23,25 +22,13 @@ The resulting layout is:
 ```text
 /opt/openshorts/uploads -> /var/lib/openshorts/uploads
 /opt/openshorts/output  -> /var/lib/openshorts/output
-/var/lib/openshorts/.gemini
-/var/lib/openshorts/tmp/gemini-cli
 ```
 
 The EC2 root volume should use encrypted persistent EBS storage. Do not place `/var/lib/openshorts` on ephemeral instance storage.
 
-## Install Gemini CLI
+## Configure the custom AI endpoint
 
-Use Node.js 22 LTS and install only the official scoped package:
-
-```bash
-node --version
-sudo npm install -g @google/gemini-cli@latest
-/usr/local/bin/gemini --version
-```
-
-Do not install similarly named unscoped packages.
-
-## Environment
+Copy the protected environment template:
 
 ```bash
 sudo cp deploy/aws-native/openshorts.env.example \
@@ -51,53 +38,72 @@ sudo chmod 0640 /etc/openshorts/openshorts.env
 sudo editor /etc/openshorts/openshorts.env
 ```
 
-Keep:
+Set the endpoint values:
 
 ```dotenv
-OPENSHORTS_SERVER_GEMINI_OAUTH=true
-HOME=/var/lib/openshorts
-GEMINI_CLI_CREDENTIAL_DIR=/var/lib/openshorts/.gemini
+AI_PROVIDER=openai_compatible
+AI_BASE_URL=https://router.example.com/v1
+AI_API_KEY=replace_with_endpoint_api_key
+AI_MODEL=google/gemini-2.5-flash
+AI_TEMPERATURE=0.2
+AI_TIMEOUT_SECONDS=180
+AI_MAX_TOKENS=4096
 ```
 
-Do not add Google OAuth tokens or long-lived AWS access keys to the environment file.
-
-## One-time Google OAuth login
-
-Connect through AWS Systems Manager Session Manager, then run:
-
-```bash
-cd /opt/openshorts
-sudo bash deploy/aws-native/gemini-oauth-login.sh
-```
-
-The official Gemini CLI prints a URL or device code. Open it in your local browser and sign in with the Google account that should remain attached to this server.
-
-Credentials are stored by Gemini CLI under:
+The Base URL is normalized so these forms are accepted:
 
 ```text
-/var/lib/openshorts/.gemini
+https://router.example.com/v1
+https://router.example.com/v1/models
+https://router.example.com/v1/chat/completions
 ```
 
-They survive application rebuilds, Git updates, service restarts, and EC2 reboots because the directory lives on persistent EBS.
-
-Do not run the login as `root` or `ubuntu`. The backend service runs as `openshorts` and must own the same credential store.
-
-## Verify OAuth before starting the backend
-
-```bash
-cd /opt/openshorts
-sudo bash deploy/aws-native/gemini-oauth-check.sh
-```
-
-Expected result:
+OpenShorts uses the same API root for:
 
 ```text
-PASS: persistent Gemini OAuth is ready for the OpenShorts service user
+GET  /models
+POST /chat/completions
 ```
 
-The checker hides raw CLI output so authentication data cannot leak into terminal logs.
+Do not commit the real API key. Do not put it in shell history, cloud-init user data, screenshots, or support logs.
 
-Do not enable production traffic until this check succeeds.
+## Verify the endpoint on the VPS
+
+Run the model-list request as the same service user as the backend:
+
+```bash
+sudo -u openshorts -H bash -lc '
+  set -a
+  . /etc/openshorts/openshorts.env
+  set +a
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer ${AI_API_KEY}" \
+    --header "Accept: application/json" \
+    "${AI_BASE_URL%/}/models" \
+    | python3 -m json.tool \
+    | head -80
+'
+```
+
+Confirm that the response contains the Gemini model ID intended for production.
+
+Test a small chat completion without printing the API key:
+
+```bash
+sudo -u openshorts -H bash -lc '
+  set -a
+  . /etc/openshorts/openshorts.env
+  set +a
+  curl --fail --silent --show-error \
+    --header "Authorization: Bearer ${AI_API_KEY}" \
+    --header "Content-Type: application/json" \
+    --data "{\"model\":\"${AI_MODEL}\",\"messages\":[{\"role\":\"user\",\"content\":\"Reply with OPENSHORTS_OK\"}],\"max_tokens\":32}" \
+    "${AI_BASE_URL%/}/chat/completions" \
+    | python3 -m json.tool
+'
+```
+
+Do not enable production traffic until both requests succeed.
 
 ## Install systemd services
 
@@ -123,56 +129,69 @@ sudo systemctl --no-pager --full status openshorts-renderer
 sudo journalctl -u openshorts-backend -n 100 --no-pager
 ```
 
-## Frontend setting
+## Configure the dashboard
 
-Choose:
-
-```text
-Gemini OAuth — account stored on AWS server
-```
-
-Then click:
+Open **Settings** and choose:
 
 ```text
-Use Server OAuth
+Custom Endpoint + API Key
 ```
 
-The browser stores only a non-sensitive provider selection, model, and timeout. Google access and refresh credentials never leave the VPS.
+Then:
 
-## Security boundary
+1. Enter the same Base URL.
+2. Enter the endpoint API key.
+3. Wait for automatic model discovery.
+4. Select a Gemini model from the dropdown.
+5. Click **Save Endpoint**.
 
-Client requests cannot select the server executable or working directory. These values are accepted only from the protected systemd environment:
+The dashboard prioritizes model IDs containing `gemini`.
 
-```dotenv
-GEMINI_CLI_BINARY=/usr/local/bin/gemini
-GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli
+## Browser CORS requirement
+
+The dashboard calls the endpoint's `/models` route directly for automatic discovery.
+
+External endpoints must allow the OpenShorts origin and these headers:
+
+```text
+Authorization
+Accept
 ```
 
-The server feature is disabled unless this explicit opt-in exists:
+If CORS is blocked, enter the known model ID manually. The FastAPI backend can still use the endpoint for generation because server-to-server requests are not restricted by browser CORS.
 
-```dotenv
-OPENSHORTS_SERVER_GEMINI_OAUTH=true
-```
+For a router running on the same VPS, expose a protected same-origin models path through Nginx rather than opening the router publicly.
 
-Do not expose the application publicly without authentication and rate limiting. Anyone who can submit a clipping job can consume the OAuth account's available quota.
+## Network security
+
+- Keep FastAPI on `127.0.0.1:8000`.
+- Keep the renderer on `127.0.0.1:3100`.
+- Expose only Nginx ports 80 and 443.
+- Use HTTPS for external AI endpoints.
+- Restrict a private router with security groups or localhost binding.
+- Do not expose an endpoint without authentication.
+- Add application authentication and rate limiting before allowing untrusted users to submit jobs.
+
+## AWS credentials
+
+Use an EC2 IAM instance profile for S3. Do not add permanent AWS access keys to `/etc/openshorts/openshorts.env`.
 
 ## Scope limitation
 
-Gemini CLI OAuth is used for text-based tasks such as transcript analysis, viral moment selection, hooks, titles, and descriptions.
+The custom endpoint is used for text-based tasks such as transcript analysis, viral-moment selection, hooks, titles, and descriptions.
 
-The Gemini Files API is not exposed by Gemini CLI. Features that upload a video directly to Gemini still require the regular **Google Gemini API Key** provider.
+Direct Gemini Files API video uploads are not translated to the OpenAI-compatible API. Those operations still require the direct **Google Gemini API Key** provider.
 
-## Reset or change the attached Google account
+## Rotate the endpoint API key
+
+1. Create a replacement key at the endpoint provider.
+2. Update `/etc/openshorts/openshorts.env`.
+3. Update the dashboard setting.
+4. Restart the backend.
+5. Run model discovery and one clipping smoke test.
+6. Revoke the old key.
 
 ```bash
-sudo systemctl stop openshorts-backend
-sudo mv /var/lib/openshorts/.gemini \
-  "/var/lib/openshorts/.gemini.backup.$(date +%Y%m%d-%H%M%S)"
-sudo install -d -o openshorts -g openshorts -m 0700 \
-  /var/lib/openshorts/.gemini
-sudo bash deploy/aws-native/gemini-oauth-login.sh
-sudo bash deploy/aws-native/gemini-oauth-check.sh
-sudo systemctl start openshorts-backend
+sudo systemctl restart openshorts-backend
+sudo systemctl --no-pager --full status openshorts-backend
 ```
-
-Keep the backup until the new account passes a real clipping test, then remove it securely.

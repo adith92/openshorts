@@ -10,6 +10,7 @@ from custom_ai_client import (
     CONFIG_PREFIX,
     CustomAIError,
     OpenAICompatibleClient,
+    extract_model_ids,
     resolve_custom_ai_config,
 )
 
@@ -19,33 +20,61 @@ def encoded_config(**overrides):
         "provider": "openai_compatible",
         "baseUrl": "http://omniroute:20128/v1",
         "apiKey": "test-secret",
-        "model": "auto",
+        "model": "google/gemini-2.5-flash",
         "temperature": 0.2,
         "timeoutSeconds": 30,
         "maxTokens": 4096,
     }
     payload.update(overrides)
-    encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode("ascii")
+    encoded = base64.b64encode(json.dumps(payload).encode("utf-8")).decode(
+        "ascii"
+    )
     return CONFIG_PREFIX + encoded
 
 
 class CustomAIConfigTests(unittest.TestCase):
     def test_decodes_browser_configuration(self):
         config = resolve_custom_ai_config(encoded_config())
-        self.assertEqual(config.model, "auto")
+        self.assertEqual(config.model, "google/gemini-2.5-flash")
         self.assertEqual(
             config.chat_completions_url,
             "http://omniroute:20128/v1/chat/completions",
         )
-        self.assertEqual(config.safe_endpoint_label, "http://omniroute:20128/v1")
+        self.assertEqual(
+            config.models_url,
+            "http://omniroute:20128/v1/models",
+        )
+        self.assertEqual(
+            config.safe_endpoint_label,
+            "http://omniroute:20128/v1",
+        )
 
     def test_accepts_full_chat_completions_url(self):
         config = resolve_custom_ai_config(
-            encoded_config(baseUrl="https://router.example/v1/chat/completions")
+            encoded_config(
+                baseUrl="https://router.example/v1/chat/completions"
+            )
         )
         self.assertEqual(
             config.chat_completions_url,
             "https://router.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            config.models_url,
+            "https://router.example/v1/models",
+        )
+
+    def test_accepts_full_models_url(self):
+        config = resolve_custom_ai_config(
+            encoded_config(baseUrl="https://router.example/v1/models")
+        )
+        self.assertEqual(
+            config.chat_completions_url,
+            "https://router.example/v1/chat/completions",
+        )
+        self.assertEqual(
+            config.models_url,
+            "https://router.example/v1/models",
         )
 
     def test_plain_gemini_key_keeps_original_provider(self):
@@ -54,13 +83,113 @@ class CustomAIConfigTests(unittest.TestCase):
 
     def test_rejects_invalid_scheme(self):
         with self.assertRaises(CustomAIError):
-            resolve_custom_ai_config(encoded_config(baseUrl="file:///etc/passwd"))
+            resolve_custom_ai_config(
+                encoded_config(baseUrl="file:///etc/passwd")
+            )
 
     def test_rejects_credentials_in_url(self):
         with self.assertRaises(CustomAIError):
             resolve_custom_ai_config(
-                encoded_config(baseUrl="http://user:password@router.example/v1")
+                encoded_config(
+                    baseUrl="http://user:password@router.example/v1"
+                )
             )
+
+    def test_requires_selected_model(self):
+        with self.assertRaisesRegex(CustomAIError, "model is missing"):
+            resolve_custom_ai_config(encoded_config(model=""))
+
+
+class ModelDiscoveryTests(unittest.TestCase):
+    def test_extracts_and_prioritizes_gemini_models(self):
+        models = extract_model_ids(
+            {
+                "data": [
+                    {"id": "openai/gpt-4.1"},
+                    {"id": "google/gemini-2.5-pro"},
+                    {"id": "google/gemini-2.5-flash"},
+                    {"id": "google/gemini-2.5-pro"},
+                ]
+            }
+        )
+
+        self.assertEqual(
+            models,
+            [
+                "google/gemini-2.5-flash",
+                "google/gemini-2.5-pro",
+                "openai/gpt-4.1",
+            ],
+        )
+
+    def test_supports_gemini_style_models_payload(self):
+        models = extract_model_ids(
+            {
+                "models": [
+                    {"name": "models/gemini-2.5-flash"},
+                    {"name": "models/gemini-2.5-pro"},
+                ]
+            }
+        )
+        self.assertEqual(
+            models,
+            [
+                "models/gemini-2.5-flash",
+                "models/gemini-2.5-pro",
+            ],
+        )
+
+    def test_client_fetches_models_with_endpoint_api_key(self):
+        config = resolve_custom_ai_config(encoded_config())
+
+        def handler(request):
+            self.assertEqual(request.method, "GET")
+            self.assertEqual(
+                str(request.url),
+                "http://omniroute:20128/v1/models",
+            )
+            self.assertEqual(
+                request.headers["authorization"],
+                "Bearer test-secret",
+            )
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "openai/gpt-4.1"},
+                        {"id": "google/gemini-2.5-flash"},
+                    ]
+                },
+            )
+
+        client = OpenAICompatibleClient(
+            config,
+            transport=httpx.MockTransport(handler),
+        )
+        self.assertEqual(
+            client.models.list(),
+            ["google/gemini-2.5-flash", "openai/gpt-4.1"],
+        )
+
+    def test_model_discovery_error_redacts_api_key(self):
+        config = resolve_custom_ai_config(encoded_config())
+
+        def handler(_request):
+            return httpx.Response(
+                401,
+                text="invalid bearer test-secret",
+            )
+
+        client = OpenAICompatibleClient(
+            config,
+            transport=httpx.MockTransport(handler),
+        )
+
+        with self.assertRaises(CustomAIError) as raised:
+            client.models.list()
+
+        self.assertNotIn("test-secret", str(raised.exception))
+        self.assertIn("***", str(raised.exception))
 
 
 class OpenAICompatibleClientTests(unittest.TestCase):
@@ -68,32 +197,46 @@ class OpenAICompatibleClientTests(unittest.TestCase):
         config = resolve_custom_ai_config(encoded_config())
 
         def handler(request):
-            self.assertEqual(request.headers["authorization"], "Bearer test-secret")
+            self.assertEqual(
+                request.headers["authorization"],
+                "Bearer test-secret",
+            )
             body = json.loads(request.content.decode("utf-8"))
-            self.assertEqual(body["model"], "auto")
+            self.assertEqual(body["model"], "google/gemini-2.5-flash")
             return httpx.Response(
                 200,
                 json={
-                    "choices": [{"message": {"content": "{\"shorts\": []}"}}],
+                    "choices": [
+                        {"message": {"content": '{"shorts": []}'}}
+                    ],
                     "usage": {
                         "prompt_tokens": 10,
                         "completion_tokens": 2,
                         "total_tokens": 12,
                     },
-                    "model": "routed-model",
+                    "model": "google/gemini-2.5-flash",
                 },
             )
 
-        client = OpenAICompatibleClient(config, transport=httpx.MockTransport(handler))
+        client = OpenAICompatibleClient(
+            config,
+            transport=httpx.MockTransport(handler),
+        )
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="ignored-because-selected-model-is-pinned",
             contents="RETURN ONLY VALID JSON",
         )
 
         self.assertEqual(response.text, '{"shorts": []}')
         self.assertIsNone(response.usage_metadata)
-        self.assertEqual(response.custom_usage_metadata.prompt_token_count, 10)
-        self.assertEqual(response.custom_usage_metadata.candidates_token_count, 2)
+        self.assertEqual(
+            response.custom_usage_metadata.prompt_token_count,
+            10,
+        )
+        self.assertEqual(
+            response.custom_usage_metadata.candidates_token_count,
+            2,
+        )
 
     def test_retries_without_response_format_on_400(self):
         config = resolve_custom_ai_config(encoded_config())
@@ -103,14 +246,26 @@ class OpenAICompatibleClientTests(unittest.TestCase):
             body = json.loads(request.content.decode("utf-8"))
             calls.append(body)
             if len(calls) == 1:
-                return httpx.Response(400, json={"error": "unsupported response_format"})
+                return httpx.Response(
+                    400,
+                    json={"error": "unsupported response_format"},
+                )
             return httpx.Response(
                 200,
-                json={"choices": [{"message": {"content": "{\"shorts\": []}"}}]},
+                json={
+                    "choices": [
+                        {"message": {"content": '{"shorts": []}'}}
+                    ]
+                },
             )
 
-        client = OpenAICompatibleClient(config, transport=httpx.MockTransport(handler))
-        response = client.models.generate_content(contents="RETURN ONLY VALID JSON")
+        client = OpenAICompatibleClient(
+            config,
+            transport=httpx.MockTransport(handler),
+        )
+        response = client.models.generate_content(
+            contents="RETURN ONLY VALID JSON"
+        )
 
         self.assertEqual(response.text, '{"shorts": []}')
         self.assertIn("response_format", calls[0])
@@ -124,14 +279,26 @@ class OpenAICompatibleClientTests(unittest.TestCase):
             body = json.loads(request.content.decode("utf-8"))
             calls.append(body)
             if "max_tokens" in body:
-                return httpx.Response(400, json={"error": "max_tokens is unsupported"})
+                return httpx.Response(
+                    400,
+                    json={"error": "max_tokens is unsupported"},
+                )
             return httpx.Response(
                 200,
-                json={"choices": [{"message": {"content": "done"}}]},
+                json={
+                    "choices": [
+                        {"message": {"content": "done"}}
+                    ]
+                },
             )
 
-        client = OpenAICompatibleClient(config, transport=httpx.MockTransport(handler))
-        response = client.models.generate_content(contents="plain text request")
+        client = OpenAICompatibleClient(
+            config,
+            transport=httpx.MockTransport(handler),
+        )
+        response = client.models.generate_content(
+            contents="plain text request"
+        )
 
         self.assertEqual(response.text, "done")
         self.assertIn("max_tokens", calls[0])

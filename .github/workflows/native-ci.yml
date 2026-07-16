@@ -4,14 +4,16 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [cleanup/aws-native-codebase]
+    branches:
+      - cleanup/aws-native-codebase
+      - feat/custom-endpoint-model-autofetch
 
 permissions:
   contents: read
 
 jobs:
   provider-tests:
-    name: Provider unit tests
+    name: Custom endpoint tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,16 +23,17 @@ jobs:
           cache: pip
       - name: Install lightweight test dependencies
         run: python -m pip install --upgrade pip httpx
-      - name: Run provider tests
-        env:
-          OPENSHORTS_SERVER_GEMINI_OAUTH: 'true'
-          HOME: /tmp/openshorts-ci-home
-          GEMINI_CLI_WORKING_DIR: /tmp/openshorts-ci-work
-          GEMINI_CLI_CREDENTIAL_DIR: /tmp/openshorts-ci-home/.gemini
+      - name: Validate native shell helpers
+        run: |
+          bash -n deploy/aws-native/custom-endpoint-check.sh
+          bash -n deploy/aws-native/prepare-host-layout.sh
+          bash -n scripts/clean-local-native.sh
+      - name: Run custom endpoint and deployment tests
         run: |
           python -m unittest \
             tests/test_custom_ai_client.py \
-            tests/test_gemini_cli_oauth_client.py \
+            tests/test_custom_endpoint_check_script.py \
+            tests/test_custom_endpoint_migration.py \
             tests/test_native_aws_deployment.py \
             -v
 

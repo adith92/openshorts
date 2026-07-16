@@ -24,10 +24,6 @@ install -d -o openshorts -g openshorts -m 0750 \
   "$SERVICE_HOME/uploads" \
   "$SERVICE_HOME/output"
 
-install -d -o openshorts -g openshorts -m 0700 \
-  "$SERVICE_HOME/.gemini" \
-  "$SERVICE_HOME/tmp/gemini-cli"
-
 install -d -o root -g openshorts -m 0750 /etc/openshorts
 
 for runtime_name in uploads output; do
@@ -49,8 +45,6 @@ for runtime_name in uploads output; do
 done
 
 chown -R openshorts:openshorts "$SERVICE_HOME"
-chmod 0700 "$SERVICE_HOME/.gemini" "$SERVICE_HOME/tmp/gemini-cli"
 
 echo "Native OpenShorts host layout is ready."
 echo "Runtime media: $SERVICE_HOME/uploads and $SERVICE_HOME/output"
-echo "Gemini OAuth: $SERVICE_HOME/.gemini"

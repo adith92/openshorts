@@ -1,3 +1,2 @@
-// The AI provider component stores only non-sensitive provider preferences for
-// server OAuth. Google OAuth credentials remain on the AWS VPS service account.
+// Compatibility export for the custom AI endpoint settings component.
 export { default } from './AIProviderSettings';

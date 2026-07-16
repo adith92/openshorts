@@ -1,13 +1,14 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     AlertTriangle,
     Check,
     Eye,
     EyeOff,
     Key,
+    RefreshCw,
     Server,
-    ShieldCheck,
-    Terminal,
+    Wifi,
+    WifiOff,
 } from 'lucide-react';
 
 const CONFIG_PREFIX = 'OPENSHORTS_AI_V1:';
@@ -27,20 +28,54 @@ const decodeUtf8Base64 = (value) => {
     return new TextDecoder().decode(bytes);
 };
 
+const normalizeBaseUrl = (value) => value.trim().replace(/\/+$/, '');
+
+const buildModelsUrl = (value) => {
+    let base = normalizeBaseUrl(value);
+    if (!base) return '';
+    base = base.replace(/\/chat\/completions$/i, '');
+    if (/\/models$/i.test(base)) return base;
+    return `${base}/models`;
+};
+
+const extractModelIds = (payload) => {
+    const candidates = [];
+
+    if (Array.isArray(payload?.data)) candidates.push(...payload.data);
+    if (Array.isArray(payload?.models)) candidates.push(...payload.models);
+    if (Array.isArray(payload?.result?.data)) candidates.push(...payload.result.data);
+    if (Array.isArray(payload?.result?.models)) candidates.push(...payload.result.models);
+    if (Array.isArray(payload)) candidates.push(...payload);
+
+    const ids = candidates
+        .map((item) => {
+            if (typeof item === 'string') return item;
+            if (!item || typeof item !== 'object') return '';
+            return item.id || item.name || item.model || item.slug || '';
+        })
+        .map((value) => String(value).trim())
+        .filter(Boolean);
+
+    return [...new Set(ids)].sort((left, right) => {
+        const leftGemini = /gemini/i.test(left);
+        const rightGemini = /gemini/i.test(right);
+        if (leftGemini !== rightGemini) return leftGemini ? -1 : 1;
+        return left.localeCompare(right);
+    });
+};
+
 const defaults = {
-    provider: 'gemini_cli_oauth',
+    provider: 'openai_compatible',
     apiKey: '',
     baseUrl: '',
-    model: 'auto',
+    model: '',
     temperature: '0.2',
     timeoutSeconds: '180',
     maxTokens: '4096',
 };
 
 const parseSavedValue = (savedKey) => {
-    if (!savedKey) {
-        return { ...defaults };
-    }
+    if (!savedKey) return { ...defaults };
 
     if (!savedKey.startsWith(CONFIG_PREFIX)) {
         return {
@@ -55,11 +90,18 @@ const parseSavedValue = (savedKey) => {
         const raw = decodeUtf8Base64(savedKey.slice(CONFIG_PREFIX.length));
         const parsed = JSON.parse(raw);
         const provider = parsed.provider || 'openai_compatible';
+
+        // Gemini CLI OAuth is no longer offered. Migrate old browser settings to
+        // a blank custom endpoint form rather than keeping a dead provider selected.
+        if (['gemini_cli_oauth', 'gemini-cli-oauth', 'gemini_cli', 'gemini-cli'].includes(provider)) {
+            return { ...defaults };
+        }
+
         return {
             provider,
             apiKey: parsed.apiKey || '',
             baseUrl: parsed.baseUrl || '',
-            model: parsed.model || (provider === 'gemini' ? 'gemini-2.5-flash' : 'auto'),
+            model: parsed.model || (provider === 'gemini' ? 'gemini-2.5-flash' : ''),
             temperature: String(parsed.temperature ?? 0.2),
             timeoutSeconds: String(parsed.timeoutSeconds ?? 180),
             maxTokens: String(parsed.maxTokens ?? 4096),
@@ -81,6 +123,12 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
     const [maxTokens, setMaxTokens] = useState(initial.maxTokens);
     const [isVisible, setIsVisible] = useState(false);
     const [isSaved, setIsSaved] = useState(!!savedKey);
+    const [modelOptions, setModelOptions] = useState([]);
+    const [modelStatus, setModelStatus] = useState('idle');
+    const [modelError, setModelError] = useState('');
+    const [showAllModels, setShowAllModels] = useState(false);
+    const fetchSequence = useRef(0);
+    const activeModelRequest = useRef(null);
 
     useEffect(() => {
         const parsed = parseSavedValue(savedKey);
@@ -95,23 +143,159 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
     }, [savedKey]);
 
     const isCustom = provider === 'openai_compatible';
-    const isServerOAuth = provider === 'gemini_cli_oauth';
-    const requiresApiKey = !isServerOAuth;
     const canSave = (
-        (!requiresApiKey || apiKey.trim().length > 0)
-        && (!isCustom || (baseUrl.trim().length > 0 && model.trim().length > 0))
+        apiKey.trim().length > 0
+        && (!isCustom || (
+            baseUrl.trim().length > 0
+            && model.trim().length > 0
+        ))
     );
 
+    const geminiModels = useMemo(
+        () => modelOptions.filter((item) => /gemini/i.test(item)),
+        [modelOptions],
+    );
+
+    const visibleModels = useMemo(() => {
+        if (showAllModels || geminiModels.length === 0) return modelOptions;
+        return geminiModels;
+    }, [geminiModels, modelOptions, showAllModels]);
+
     const markDirty = () => setIsSaved(false);
+
+    const cancelModelFetch = useCallback(() => {
+        fetchSequence.current += 1;
+        activeModelRequest.current?.abort();
+        activeModelRequest.current = null;
+    }, []);
+
+    const fetchModels = useCallback(async ({ silent = false } = {}) => {
+        const cleanBaseUrl = normalizeBaseUrl(baseUrl);
+        const cleanApiKey = apiKey.trim();
+        const modelsUrl = buildModelsUrl(cleanBaseUrl);
+
+        if (!isCustom || !modelsUrl || cleanApiKey.length < 4) {
+            cancelModelFetch();
+            setModelOptions([]);
+            setModelStatus('idle');
+            setModelError('');
+            return;
+        }
+
+        let parsedUrl;
+        try {
+            parsedUrl = new URL(modelsUrl);
+        } catch (error) {
+            cancelModelFetch();
+            setModelOptions([]);
+            setModelStatus('error');
+            setModelError('Enter a valid HTTP or HTTPS endpoint URL.');
+            return;
+        }
+
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+            cancelModelFetch();
+            setModelOptions([]);
+            setModelStatus('error');
+            setModelError('Model discovery only supports HTTP or HTTPS endpoints.');
+            return;
+        }
+
+        activeModelRequest.current?.abort();
+        const sequence = fetchSequence.current + 1;
+        fetchSequence.current = sequence;
+        setModelStatus('loading');
+        if (!silent) setModelError('');
+
+        const controller = new AbortController();
+        activeModelRequest.current = controller;
+        const timeout = window.setTimeout(() => controller.abort(), 20000);
+
+        try {
+            const response = await fetch(modelsUrl, {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json',
+                    Authorization: `Bearer ${cleanApiKey}`,
+                },
+                signal: controller.signal,
+            });
+
+            if (!response.ok) {
+                const raw = await response.text();
+                const safeMessage = raw
+                    .replaceAll(cleanApiKey, '***')
+                    .replace(/\s+/g, ' ')
+                    .trim()
+                    .slice(0, 240);
+                throw new Error(`HTTP ${response.status}${safeMessage ? `: ${safeMessage}` : ''}`);
+            }
+
+            const payload = await response.json();
+            const ids = extractModelIds(payload);
+            if (ids.length === 0) {
+                throw new Error('The endpoint returned no recognizable model IDs.');
+            }
+
+            if (fetchSequence.current !== sequence) return;
+
+            const preferred = ids.filter((item) => /gemini/i.test(item));
+            setModelOptions(ids);
+            setModelStatus('success');
+            setModelError('');
+
+            setModel((current) => {
+                if (ids.includes(current)) return current;
+                return preferred[0] || ids[0];
+            });
+            setIsSaved(false);
+        } catch (error) {
+            if (fetchSequence.current !== sequence) return;
+            setModelOptions([]);
+            setModelStatus('error');
+            setModelError(
+                error?.name === 'AbortError'
+                    ? 'Model discovery timed out after 20 seconds.'
+                    : `${error?.message || 'Could not fetch models.'} Check the endpoint, API key, and CORS policy.`,
+            );
+        } finally {
+            window.clearTimeout(timeout);
+            if (activeModelRequest.current === controller) {
+                activeModelRequest.current = null;
+            }
+        }
+    }, [apiKey, baseUrl, cancelModelFetch, isCustom]);
+
+    useEffect(() => {
+        if (!isCustom || !baseUrl.trim() || apiKey.trim().length < 4) {
+            cancelModelFetch();
+            setModelOptions([]);
+            setModelStatus('idle');
+            setModelError('');
+            return undefined;
+        }
+
+        const timer = window.setTimeout(() => {
+            fetchModels({ silent: true });
+        }, 700);
+
+        return () => {
+            window.clearTimeout(timer);
+            cancelModelFetch();
+        };
+    }, [apiKey, baseUrl, cancelModelFetch, fetchModels, isCustom]);
 
     const handleProviderChange = (event) => {
         const nextProvider = event.target.value;
         setProvider(nextProvider);
+        setModelOptions([]);
+        setModelError('');
+        setModelStatus('idle');
 
         if (nextProvider === 'gemini') {
             setModel('gemini-2.5-flash');
-        } else if (model === 'gemini-2.5-flash') {
-            setModel('auto');
+        } else if (provider === 'gemini') {
+            setModel('');
         }
         markDirty();
     };
@@ -127,28 +311,20 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
 
         const config = {
             provider,
-            model: model.trim() || 'auto',
+            baseUrl: normalizeBaseUrl(baseUrl),
+            apiKey: apiKey.trim(),
+            model: model.trim(),
+            temperature: Number(temperature) || 0.2,
             timeoutSeconds: Number(timeoutSeconds) || 180,
+            maxTokens: Number(maxTokens) || 4096,
         };
 
-        if (isCustom) {
-            config.baseUrl = baseUrl.trim().replace(/\/+$/, '');
-            config.apiKey = apiKey.trim();
-            config.temperature = Number(temperature) || 0.2;
-            config.maxTokens = Number(maxTokens) || 4096;
-        }
-
-        // Server OAuth stores only non-sensitive provider preferences here.
-        // Google OAuth credentials remain exclusively on the VPS filesystem.
         onKeySet(CONFIG_PREFIX + encodeUtf8Base64(JSON.stringify(config)));
         setIsSaved(true);
     };
 
-    const icon = isServerOAuth
-        ? <ShieldCheck size={20} />
-        : isCustom
-            ? <Server size={20} />
-            : <Key size={20} />;
+    const icon = isCustom ? <Server size={20} /> : <Key size={20} />;
+    const modelsUrl = buildModelsUrl(baseUrl);
 
     return (
         <div className="bg-surface border border-white/5 rounded-2xl p-6 mb-8 animate-[fadeIn_0.5s_ease-out]">
@@ -157,7 +333,7 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                 <div>
                     <h2 className="text-lg font-semibold">AI Provider</h2>
                     <p className="text-xs text-zinc-500">
-                        Used for transcript-based automatic viral clip detection.
+                        Custom endpoint model discovery and transcript-based clipping analysis.
                     </p>
                 </div>
             </div>
@@ -170,12 +346,11 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                         onChange={handleProviderChange}
                         className="input-field"
                     >
-                        <option value="gemini_cli_oauth">
-                            Gemini OAuth — account stored on AWS server
-                        </option>
-                        <option value="gemini">Google Gemini API Key</option>
                         <option value="openai_compatible">
-                            OpenAI Compatible / Custom Endpoint
+                            Custom Endpoint + API Key
+                        </option>
+                        <option value="gemini">
+                            Google Gemini API Key (direct fallback)
                         </option>
                     </select>
                 </div>
@@ -185,22 +360,109 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                         <div>
                             <label className="block text-sm text-zinc-400 mb-2">Base URL</label>
                             <input
-                                type="text"
+                                type="url"
                                 value={baseUrl}
                                 onChange={(event) => {
                                     setBaseUrl(event.target.value);
                                     markDirty();
                                 }}
-                                placeholder="http://127.0.0.1:20128/v1"
+                                placeholder="https://router.example.com/v1"
                                 className="input-field font-mono"
+                                autoComplete="url"
                             />
                             <p className="mt-2 text-xs text-zinc-500">
-                                Use an endpoint reachable from the backend host, such as a localhost service or a secured HTTPS gateway.
+                                OpenShorts automatically requests <code>{modelsUrl || 'BASE_URL/models'}</code> and uses the selected model for chat completions.
                             </p>
                         </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Field label="Model" value={model} setValue={setModel} dirty={markDirty} placeholder="auto" />
+                        <ApiKeyInput
+                            label="Endpoint API Key"
+                            value={apiKey}
+                            setValue={setApiKey}
+                            isVisible={isVisible}
+                            setIsVisible={setIsVisible}
+                            dirty={markDirty}
+                            placeholder="Endpoint API key"
+                        />
+
+                        <div className="rounded-xl border border-white/10 bg-black/10 p-4 space-y-3">
+                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                <div>
+                                    <div className="flex items-center gap-2 text-sm font-medium text-zinc-200">
+                                        {modelStatus === 'success'
+                                            ? <Wifi size={16} className="text-emerald-400" />
+                                            : modelStatus === 'error'
+                                                ? <WifiOff size={16} className="text-rose-400" />
+                                                : <Server size={16} className="text-zinc-400" />}
+                                        Endpoint Models
+                                    </div>
+                                    <p className="text-xs text-zinc-500 mt-1">
+                                        Models are fetched automatically after the URL and API key are entered.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => fetchModels()}
+                                    disabled={!baseUrl.trim() || apiKey.trim().length < 4 || modelStatus === 'loading'}
+                                    className="px-3 py-2 rounded-lg border border-white/10 bg-white/5 hover:bg-white/10 text-xs text-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                >
+                                    <RefreshCw size={14} className={modelStatus === 'loading' ? 'animate-spin' : ''} />
+                                    {modelStatus === 'loading' ? 'Fetching...' : 'Refresh Models'}
+                                </button>
+                            </div>
+
+                            {modelStatus === 'success' && (
+                                <div className="text-xs text-emerald-300">
+                                    Found {modelOptions.length} model{modelOptions.length === 1 ? '' : 's'}, including {geminiModels.length} Gemini model{geminiModels.length === 1 ? '' : 's'}.
+                                </div>
+                            )}
+
+                            {modelError && (
+                                <div className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-3 text-xs text-rose-200">
+                                    {modelError}
+                                </div>
+                            )}
+
+                            {visibleModels.length > 0 ? (
+                                <div>
+                                    <label className="block text-sm text-zinc-400 mb-2">Gemini Model</label>
+                                    <select
+                                        value={model}
+                                        onChange={(event) => {
+                                            setModel(event.target.value);
+                                            markDirty();
+                                        }}
+                                        className="input-field font-mono"
+                                    >
+                                        {visibleModels.map((item) => (
+                                            <option key={item} value={item}>{item}</option>
+                                        ))}
+                                    </select>
+
+                                    {geminiModels.length > 0 && modelOptions.length > geminiModels.length && (
+                                        <label className="mt-3 flex items-center gap-2 text-xs text-zinc-400 cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={showAllModels}
+                                                onChange={(event) => setShowAllModels(event.target.checked)}
+                                                className="rounded border-white/20 bg-black/20"
+                                            />
+                                            Show all {modelOptions.length} endpoint models
+                                        </label>
+                                    )}
+                                </div>
+                            ) : (
+                                <Field
+                                    label="Model ID (manual fallback)"
+                                    value={model}
+                                    setValue={setModel}
+                                    dirty={markDirty}
+                                    placeholder="google/gemini-2.5-flash"
+                                />
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <Field label="Temperature" value={temperature} setValue={setTemperature} dirty={markDirty} type="number" />
                             <Field label="Timeout (seconds)" value={timeoutSeconds} setValue={setTimeoutSeconds} dirty={markDirty} type="number" />
                             <Field label="Max output tokens" value={maxTokens} setValue={setMaxTokens} dirty={markDirty} type="number" />
@@ -208,71 +470,16 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                     </>
                 )}
 
-                {isServerOAuth && (
-                    <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <Field label="Gemini CLI Model" value={model} setValue={setModel} dirty={markDirty} placeholder="auto" />
-                            <Field label="Timeout (seconds)" value={timeoutSeconds} setValue={setTimeoutSeconds} dirty={markDirty} type="number" />
-                        </div>
-
-                        <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4 text-xs leading-relaxed">
-                            <div className="flex items-center gap-2 font-semibold text-emerald-300 mb-2">
-                                <ShieldCheck size={16} /> Persistent server-owned Google login
-                            </div>
-                            <p className="text-zinc-300">
-                                Your Google OAuth session is stored on the private AWS VPS under the Linux service account <code>openshorts</code>. The browser stores only the non-secret model and timeout selection.
-                            </p>
-                            <p className="mt-3 text-zinc-400">
-                                Login is required only once per server, or again if Google revokes or expires the session.
-                            </p>
-                        </div>
-
-                        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-4 text-xs leading-relaxed">
-                            <div className="flex items-center gap-2 font-semibold text-blue-300 mb-2">
-                                <Terminal size={16} /> One-time login through AWS Systems Manager
-                            </div>
-                            <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-lg bg-black/30 p-3 text-zinc-300 font-mono">
-{`sudo -u openshorts -H env \\
-  HOME=/var/lib/openshorts \\
-  NO_BROWSER=true \\
-  GOOGLE_GENAI_USE_GCA=true \\
-  GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true \\
-  GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli \\
-  /usr/local/bin/gemini`}
-                            </pre>
-                            <p className="mt-3 text-zinc-400">
-                                Follow the URL/code shown in the terminal. Credentials remain in <code>/var/lib/openshorts/.gemini</code> on persistent EBS storage.
-                            </p>
-                        </div>
-                    </>
-                )}
-
-                {requiresApiKey && (
-                    <div>
-                        <label className="block text-sm text-zinc-400 mb-2">
-                            {isCustom ? 'Router API Key' : 'Gemini API Key'}
-                        </label>
-                        <div className="relative">
-                            <input
-                                type={isVisible ? 'text' : 'password'}
-                                value={apiKey}
-                                onChange={(event) => {
-                                    setApiKey(event.target.value);
-                                    markDirty();
-                                }}
-                                placeholder={isCustom ? 'Router API key' : 'AIzaSy...'}
-                                className="input-field pr-12 font-mono"
-                            />
-                            <button
-                                type="button"
-                                aria-label={isVisible ? 'Hide API key' : 'Show API key'}
-                                onClick={() => setIsVisible(!isVisible)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
-                            >
-                                {isVisible ? <EyeOff size={18} /> : <Eye size={18} />}
-                            </button>
-                        </div>
-                    </div>
+                {!isCustom && (
+                    <ApiKeyInput
+                        label="Gemini API Key"
+                        value={apiKey}
+                        setValue={setApiKey}
+                        isVisible={isVisible}
+                        setIsVisible={setIsVisible}
+                        dirty={markDirty}
+                        placeholder="AIzaSy..."
+                    />
                 )}
 
                 <div className="flex justify-end">
@@ -286,19 +493,48 @@ export default function AIProviderSettings({ onKeySet, savedKey }) {
                                 : 'bg-primary hover:bg-blue-600 text-white disabled:opacity-40 disabled:cursor-not-allowed'
                         }`}
                     >
-                        {isSaved ? <><Check size={18} /> Ready</> : isServerOAuth ? 'Use Server OAuth' : 'Save AI'}
+                        {isSaved ? <><Check size={18} /> Ready</> : isCustom ? 'Save Endpoint' : 'Save Gemini Key'}
                     </button>
                 </div>
             </div>
 
-            {(isCustom || isServerOAuth) && (
+            {isCustom && (
                 <div className="mt-4 p-3 rounded-xl border border-amber-500/20 bg-amber-500/5 flex gap-2 text-xs text-amber-200/80">
                     <AlertTriangle size={16} className="text-amber-400 shrink-0" />
                     <span>
-                        This provider covers text-based clipping analysis. Direct Gemini Files API video uploads still require the regular Gemini API provider and an API key.
+                        Custom endpoints cover text-based clipping analysis. Direct Gemini Files API video uploads still require the direct Gemini API provider.
                     </span>
                 </div>
             )}
+        </div>
+    );
+}
+
+function ApiKeyInput({ label, value, setValue, isVisible, setIsVisible, dirty, placeholder }) {
+    return (
+        <div>
+            <label className="block text-sm text-zinc-400 mb-2">{label}</label>
+            <div className="relative">
+                <input
+                    type={isVisible ? 'text' : 'password'}
+                    value={value}
+                    onChange={(event) => {
+                        setValue(event.target.value);
+                        dirty();
+                    }}
+                    placeholder={placeholder}
+                    className="input-field pr-12 font-mono"
+                    autoComplete="off"
+                />
+                <button
+                    type="button"
+                    aria-label={isVisible ? 'Hide API key' : 'Show API key'}
+                    onClick={() => setIsVisible(!isVisible)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-white"
+                >
+                    {isVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+                </button>
+            </div>
         </div>
     );
 }

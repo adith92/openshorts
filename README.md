@@ -44,7 +44,7 @@ Nginx :80/:443
   +-- Remotion renderer     127.0.0.1:3100
   +-- persistent runtime    /var/lib/openshorts
   +-- AWS S3 through EC2 IAM instance role
-  +-- Gemini OAuth account  /var/lib/openshorts/.gemini
+  +-- OpenAI-compatible custom AI endpoint
 ```
 
 Production services run as the dedicated Linux account:
@@ -53,78 +53,62 @@ Production services run as the dedicated Linux account:
 openshorts
 ```
 
-## Persistent Gemini OAuth on AWS
+## Primary AI setup: Custom Endpoint + API Key
 
-The preferred provider for transcript analysis is:
+The default AI provider is an OpenAI-compatible endpoint.
+
+In **Settings**:
+
+1. Enter the Base URL.
+2. Enter the endpoint API key.
+3. OpenShorts automatically fetches `GET /models`.
+4. Gemini model IDs are prioritized in the dropdown.
+5. Select the desired Gemini model.
+6. Save the endpoint.
+
+For a Base URL such as:
 
 ```text
-Gemini OAuth — account stored on AWS server
+https://router.example.com/v1
 ```
 
-The Google account is authenticated once through the official Gemini CLI. Access and refresh credentials remain on the VPS under:
+OpenShorts uses:
 
 ```text
-/var/lib/openshorts/.gemini
+GET  https://router.example.com/v1/models
+POST https://router.example.com/v1/chat/completions
 ```
 
-The browser stores only non-sensitive provider preferences such as model and timeout.
+The API key is sent using Bearer authentication. The selected model ID is passed unchanged to the chat-completions request.
 
-Enable server OAuth in the protected service environment:
+The UI recognizes common model-list responses, including:
 
-```dotenv
-HOME=/var/lib/openshorts
-OPENSHORTS_SERVER_GEMINI_OAUTH=true
-OPENSHORTS_GEMINI_MODEL=auto
-OPENSHORTS_GEMINI_TIMEOUT_SECONDS=180
-GEMINI_CLI_BINARY=/usr/local/bin/gemini
-GEMINI_CLI_WORKING_DIR=/var/lib/openshorts/tmp/gemini-cli
-GEMINI_CLI_CREDENTIAL_DIR=/var/lib/openshorts/.gemini
-NO_BROWSER=true
-GOOGLE_GENAI_USE_GCA=true
-GEMINI_FORCE_ENCRYPTED_FILE_STORAGE=true
+```json
+{"data": [{"id": "google/gemini-2.5-flash"}]}
 ```
 
-Login once through AWS Systems Manager:
-
-```bash
-sudo bash deploy/aws-native/gemini-oauth-login.sh
+```json
+{"models": [{"name": "models/gemini-2.5-pro"}]}
 ```
 
-Verify the stored account:
+See [CUSTOM_AI_ENDPOINT.md](CUSTOM_AI_ENDPOINT.md) for the endpoint contract, CORS requirements, troubleshooting, and native AWS configuration.
 
-```bash
-sudo bash deploy/aws-native/gemini-oauth-check.sh
+### Model discovery and CORS
+
+Automatic model discovery runs from the dashboard so the list updates immediately while Settings are edited.
+
+An external endpoint must allow the OpenShorts web origin and these request headers:
+
+```text
+Authorization
+Accept
 ```
 
-See:
+When CORS blocks discovery, the Settings screen keeps a manual model-ID fallback. Generation still runs through the FastAPI backend after a valid model ID is saved.
 
-- [Native AWS deployment](deploy/aws-native/README.md)
-- [Gemini OAuth security and operation](GEMINI_CLI_OAUTH.md)
+### Direct Gemini API fallback
 
-### OAuth scope
-
-Gemini CLI OAuth supports text-based operations such as transcript analysis, viral moment selection, hooks, titles, and descriptions.
-
-The Gemini Files API is not exposed by Gemini CLI. Features that upload a video directly to Gemini still require the regular **Google Gemini API Key** provider.
-
-## AI provider options
-
-### Gemini OAuth on AWS server
-
-- default option for transcript analysis;
-- no Gemini key stored in the browser;
-- account remains attached to the VPS;
-- server binary and filesystem paths cannot be overridden by client requests.
-
-### Google Gemini API key
-
-Use this for Gemini-specific APIs, especially direct file and video upload workflows.
-
-### OpenAI-compatible endpoint
-
-Supports internal or external gateways exposing `POST /chat/completions`.
-
-See [CUSTOM_AI_ENDPOINT.md](CUSTOM_AI_ENDPOINT.md).
+The regular Google Gemini API-key provider remains available for Gemini-specific operations that are not exposed by an OpenAI-compatible router, including direct Gemini Files API video uploads.
 
 ## Repository layout
 
@@ -133,7 +117,6 @@ See [CUSTOM_AI_ENDPOINT.md](CUSTOM_AI_ENDPOINT.md).
 ├── app.py
 ├── main.py
 ├── custom_ai_client.py
-├── gemini_cli_oauth_client.py
 ├── sitecustomize.py
 ├── s3_uploader.py
 ├── dashboard/
@@ -156,16 +139,14 @@ pip install -r requirements.txt
 uvicorn app:app --host 127.0.0.1 --port 8000
 ```
 
-For local Gemini CLI OAuth testing, explicitly enable it and use a local credential directory:
+Optional server-side custom endpoint fallback:
 
 ```bash
-export OPENSHORTS_SERVER_GEMINI_OAUTH=true
-export HOME="$PWD/.local-openshorts-home"
-export GEMINI_CLI_CREDENTIAL_DIR="$HOME/.gemini"
-export GEMINI_CLI_WORKING_DIR="$HOME/tmp/gemini-cli"
+export AI_PROVIDER=openai_compatible
+export AI_BASE_URL=https://router.example.com/v1
+export AI_API_KEY=replace_me
+export AI_MODEL=google/gemini-2.5-flash
 ```
-
-Never commit that home directory.
 
 ### Frontend
 
@@ -190,6 +171,7 @@ npm --prefix render-service ci
 npm --prefix remotion ci --no-audit --no-fund
 npm --prefix render-service run build
 
+HOST=127.0.0.1 \
 PORT=3100 \
 OUTPUT_DIR="$PWD/output" \
 REMOTION_BUNDLE_PATH="$PWD/remotion" \
@@ -198,7 +180,13 @@ node render-service/dist/server.js
 
 ## AWS environment
 
-Copy the native template:
+Prepare the native host layout:
+
+```bash
+sudo bash deploy/aws-native/prepare-host-layout.sh
+```
+
+Copy the service environment template:
 
 ```bash
 sudo cp deploy/aws-native/openshorts.env.example \
@@ -207,16 +195,24 @@ sudo chown root:openshorts /etc/openshorts/openshorts.env
 sudo chmod 0640 /etc/openshorts/openshorts.env
 ```
 
+Set at least:
+
+```dotenv
+AI_PROVIDER=openai_compatible
+AI_BASE_URL=https://router.example.com/v1
+AI_API_KEY=replace_with_endpoint_api_key
+AI_MODEL=google/gemini-2.5-flash
+```
+
 Use an EC2 IAM instance role instead of storing permanent AWS access keys on the VPS.
 
 ## Tests
 
-Provider tests:
+Python provider and native deployment tests:
 
 ```bash
 python -m unittest \
   tests/test_custom_ai_client.py \
-  tests/test_gemini_cli_oauth_client.py \
   tests/test_native_aws_deployment.py \
   -v
 ```
@@ -236,7 +232,7 @@ npm --prefix remotion ci --no-audit --no-fund
 npm --prefix render-service run build
 ```
 
-GitHub CI runs these gates on the active cleanup PR.
+GitHub CI runs these gates on the active pull request.
 
 ## Security notes
 
@@ -244,10 +240,11 @@ GitHub CI runs these gates on the active cleanup PR.
 - Use AWS Systems Manager for administrative access.
 - Keep ports 8000 and 3100 bound to localhost.
 - Persist `/var/lib/openshorts` on encrypted EBS.
-- Protect `/var/lib/openshorts/.gemini` with mode `0700` and files with mode `0600`.
-- Do not expose the application publicly without adding authentication and rate limiting.
+- Protect `/etc/openshorts/openshorts.env` as `root:openshorts` with mode `0640`.
+- Do not expose the application publicly without authentication and rate limiting.
+- Use HTTPS for external AI endpoints.
 - Use an EC2 IAM role for S3.
-- Never commit `.env`, OAuth files, API keys, generated media, model weights, virtual environments, dependency folders, or build outputs.
+- Never commit `.env`, API keys, generated media, model weights, virtual environments, dependency folders, or build outputs.
 
 ## License
 
