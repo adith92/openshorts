@@ -21,9 +21,6 @@ services:
     container_name: openshorts-frontend
     ports:
       - "80:80"
-    volumes:
-      - ./dashboard:/app
-      - /app/node_modules
     restart: unless-stopped
     depends_on:
       - backend
