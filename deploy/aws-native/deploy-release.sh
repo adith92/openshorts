@@ -15,6 +15,7 @@ add-apt-repository -y ppa:deadsnakes/ppa
 curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
 apt-get update -y
 apt-get install -y python3.11 python3.11-venv python3.11-dev nodejs ffmpeg imagemagick nginx build-essential
+npm install -g @google/gemini-cli
 
 # 2. Setup virtual environment
 log "Setting up Python virtual environment..."
