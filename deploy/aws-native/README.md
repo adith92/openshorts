@@ -2,33 +2,29 @@
 
 This directory contains the production settings for running OpenShorts directly on an AWS EC2 VPS without Docker.
 
-## Runtime identity
+## Prepare the persistent host layout
 
-Create one dedicated Linux account:
+After cloning the repository to `/opt/openshorts`, run:
 
 ```bash
-sudo useradd \
-  --system \
-  --create-home \
-  --home-dir /var/lib/openshorts \
-  --shell /bin/bash \
-  openshorts
-sudo passwd -l openshorts
+sudo bash deploy/aws-native/prepare-host-layout.sh
 ```
 
-Create persistent directories:
+The helper:
 
-```bash
-sudo install -d -o openshorts -g openshorts -m 0750 \
-  /opt/openshorts \
-  /var/lib/openshorts/uploads \
-  /var/lib/openshorts/output
+- creates the dedicated Linux account `openshorts` when needed;
+- creates persistent runtime directories under `/var/lib/openshorts`;
+- creates the protected Gemini credential directory;
+- links `/opt/openshorts/uploads` and `/opt/openshorts/output` to persistent storage;
+- archives non-empty legacy runtime directories instead of deleting them.
 
-sudo install -d -o openshorts -g openshorts -m 0700 \
-  /var/lib/openshorts/.gemini \
-  /var/lib/openshorts/tmp/gemini-cli
+The resulting layout is:
 
-sudo install -d -o root -g openshorts -m 0750 /etc/openshorts
+```text
+/opt/openshorts/uploads -> /var/lib/openshorts/uploads
+/opt/openshorts/output  -> /var/lib/openshorts/output
+/var/lib/openshorts/.gemini
+/var/lib/openshorts/tmp/gemini-cli
 ```
 
 The EC2 root volume should use encrypted persistent EBS storage. Do not place `/var/lib/openshorts` on ephemeral instance storage.
