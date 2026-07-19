@@ -1,102 +1,128 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository guidance for Claude Code and other coding agents working on OpenShorts.
 
-## Project Overview
+## Source of Truth
 
-OpenShorts is an AI-powered vertical video generator that transforms long YouTube videos or local uploads into viral-ready short clips (9:16 format) for TikTok, Instagram Reels, and YouTube Shorts. Uses Google Gemini 2.0 Flash for viral moment detection and title generation.
+- Repository: `adith92/openshorts`
+- Primary branch: `main`
+- Production path: native AWS EC2/VPS
+- Docker and Vercel are not production deployment paths.
+- Never commit directly to `main`. Use `feat/`, `fix/`, `security/`, or `refactor/` branches and open a pull request.
 
-## Development Commands
+Before changing code, inspect the latest repository state, open pull requests, branches, recent commits, CI results, and related documentation.
 
-### Local Development (Docker)
+## Product Scope
+
+OpenShorts is an AI video platform for:
+
+- clipping long videos into Shorts, Reels, and TikTok videos;
+- AI UGC video generation;
+- YouTube title, thumbnail, description, and publishing workflows.
+
+## Production Architecture
+
+- FastAPI backend
+- React and Vite dashboard
+- Node.js Remotion render service
+- FFmpeg video processing
+- Nginx reverse proxy
+- systemd services
+- persistent runtime storage under `/var/lib/openshorts`
+- AWS EC2/VPS native deployment
+
+The primary text-generation provider is an OpenAI-compatible custom endpoint. Direct Gemini API access remains available for Gemini Files API, direct video upload, image generation, and Gemini-specific tools.
+
+## Required Execution Order
+
+For every implementation or release task:
+
+1. Synchronize the local checkout with the latest `origin/main` without discarding uncommitted user work.
+2. Inspect the relevant code, tests, deployment configuration, and documentation.
+3. Run the existing local test and build suite before modifying code.
+4. Search for correctness, security, reliability, memory, concurrency, and deployment bugs.
+5. Fix validated findings on a dedicated branch.
+6. Add or update tests for every bug fix.
+7. Update documentation when behavior, configuration, or deployment changes.
+8. Run the complete validation gate again.
+9. Perform a security review. Do not continue when a BLOCKER or HIGH finding remains.
+10. Open or update a pull request. Never merge when CI fails.
+11. Deploy to AWS only after local validation and CI are green.
+12. Run post-deployment health checks and a real clipping smoke test.
+
+## Current Security Priorities
+
+1. Authentication and authorization
+2. Rate limiting and quota protection
+3. Move production API keys from browser storage to authenticated server-side storage
+4. Job ownership and access isolation
+5. Restrictive production CORS
+6. SSRF protection for every user-controlled URL
+7. Streaming file uploads and publishing instead of loading full videos into RAM
+8. File type, size, duration, and filename validation
+9. Persistent database and durable job queue
+10. Upload-Post credentials required only when publishing
+
+## Local Validation
+
+Run the commands that apply to the changed scope. At minimum, validate all currently supported components:
+
 ```bash
-docker compose up --build   # Build and run full stack
-```
-- Backend: http://localhost:8000 (FastAPI/Uvicorn)
-- Frontend: http://localhost:5175 (Vite proxies API calls to backend)
+python -m compileall -q .
+python -m unittest discover -s tests -p 'test_*.py' -v
 
-### Frontend Only (Dashboard)
-```bash
 cd dashboard
-npm install
-npm run dev       # Dev server with HMR (port 5173)
-npm run build     # Production build
-npm run lint      # ESLint (strict, --max-warnings 0)
+npm ci
+npm run lint
+npm run build
+
+cd ../render-service
+npm ci
+npm run build
 ```
 
-### Backend Only
+Also validate native deployment scripts:
+
 ```bash
-pip install -r requirements.txt
-uvicorn app:app --host 0.0.0.0 --port 8000
+bash -n deploy/aws-native/*.sh
+bash -n scripts/*.sh
 ```
 
-## Architecture
+Do not use real production API keys in tests, commands, logs, screenshots, fixtures, pull requests, or commits.
 
-### Core Processing Pipeline
-1. **Ingest** - YouTube download (yt-dlp) or local upload
-2. **Transcription** - faster-whisper with word-level timestamps
-3. **Scene Detection** - PySceneDetect for segment boundaries
-4. **AI Analysis** - Gemini identifies 3-15 viral moments (15-60 sec each)
-5. **FFmpeg Extraction** - Precise clip cutting
-6. **AI Cropping** - Vertical reframing with subject tracking
-7. **Effects/Subtitles** - Optional AI-generated FFmpeg filters
-8. **Hook Overlay** - Text overlays with styled fonts
-9. **Voice Dubbing** - Optional ElevenLabs AI translation (30+ languages)
-10. **S3 Backup** - Silent background upload
-11. **Social Distribution** - Upload-Post API (async upload)
+## AWS Deployment Gate
 
-### Key Files
-| File | Purpose |
-|------|---------|
-| `main.py` | Core video processing: transcription, scene detection, clip extraction, vertical reframing |
-| `app.py` | FastAPI server with async job queue and REST endpoints |
-| `editor.py` | Gemini AI integration for dynamic video effects (FFmpeg filter generation) |
-| `hooks.py` | Hook text overlay generation with font rendering |
-| `s3_uploader.py` | AWS S3 upload with caching |
-| `subtitles.py` | SRT generation, FFmpeg subtitle burning, and dubbed video transcription |
-| `translate.py` | ElevenLabs dubbing API for AI voice translation |
-| `dashboard/src/App.jsx` | Main React component with state management |
-| `dashboard/src/components/TranslateModal.jsx` | Voice dubbing UI with language selection |
+Deployment is allowed only when:
 
-### Dual-Mode Video Reframing
-- **TRACK Mode** (single subject): MediaPipe face detection + YOLOv8 fallback with "Heavy Tripod" stabilization
-- **GENERAL Mode** (groups/landscapes): Blurred background layout preserving full width
+- the branch is based on the latest `main`;
+- local tests and builds pass;
+- GitHub CI passes;
+- no unresolved BLOCKER or HIGH security finding exists;
+- required environment variables are present in the protected server environment;
+- a rollback point is recorded;
+- persistent runtime directories are backed up when relevant.
 
-### Key Classes
-- `SmoothedCameraman` - Stabilized camera movement with safe zone logic (prevents jitter)
-- `SpeakerTracker` - Prevents rapid speaker switching, handles temporary occlusions
+Use the native deployment documentation under `deploy/aws-native/`. Do not introduce Docker or Vercel as a production path.
 
-### API Endpoints
-| Method | Route | Purpose |
-|--------|-------|---------|
-| POST | `/api/process` | Submit video for processing |
-| GET | `/api/status/{job_id}` | Poll job status and logs |
-| POST | `/api/edit` | Apply AI video effects |
-| POST | `/api/subtitle` | Generate and apply subtitles (auto-transcribes dubbed videos) |
-| POST | `/api/hook` | Add text hook overlays |
-| POST | `/api/translate` | AI voice dubbing via ElevenLabs |
-| GET | `/api/translate/languages` | List supported dubbing languages |
-| POST | `/api/social/post` | Post to social media (async upload) |
+After deployment, verify:
 
-### Concurrency Model
-Async job queue with semaphore-based concurrency control. Configure via `MAX_CONCURRENT_JOBS` env var (default: 5). Jobs auto-cleanup after 1 hour.
+- backend and renderer systemd services are active;
+- Nginx configuration is valid and reloaded;
+- backend and renderer bind only to their intended interfaces;
+- application health endpoints respond;
+- upload, transcription, AI analysis, rendering, subtitle generation, and output download work;
+- logs contain no secrets or repeated errors;
+- one real end-to-end clipping smoke test completes successfully.
 
-## Environment Variables
+## Completion Report
 
-**Server-side (.env):**
-- `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_S3_BUCKET` - For S3 backup
-- `MAX_CONCURRENT_JOBS` - Concurrent processing limit (default: 5)
-- `VITE_API_URL` - Production API URL override
+Every completed task must report:
 
-**Client-side (localStorage, encrypted):**
-- `GEMINI_API_KEY` - Google Gemini API key (required)
-- `ELEVENLABS_API_KEY` - ElevenLabs API key for voice dubbing (optional)
-- `UPLOAD_POST_API_KEY` - Upload-Post API key for social posting (optional)
+- files changed;
+- tests and builds executed;
+- results;
+- security review result;
+- deployment actions and health-check results, when deployment occurred;
+- remaining risks and follow-up work.
 
-> API keys are stored encrypted in the browser and sent via headers only when needed. Never stored server-side.
-
-## Tech Stack
-- **Backend:** Python 3.11, FastAPI, google-genai, faster-whisper, ultralytics (YOLOv8), mediapipe, opencv-python, yt-dlp, FFmpeg, httpx
-- **Frontend:** React 18, Vite 4, Tailwind CSS 3.4
-- **External APIs:** Google Gemini, ElevenLabs Dubbing, Upload-Post
-- **Infrastructure:** Docker + Docker Compose, AWS S3
+Use Bahasa Indonesia for user-facing explanations. Keep code, identifiers, documentation commands, branch names, and commit messages in English.
