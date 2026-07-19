@@ -1,0 +1,325 @@
+# Instincts generated from https://github.com/adith92/openshorts
+# Generated: 2026-07-19T05:02:26.797Z
+# Version: 2.0
+# NOTE: This file supplements (does not replace) any existing curated instincts.
+# High-confidence manually curated instincts should be preserved alongside these.
+
+---
+id: openshorts-commit-conventional
+trigger: "when writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Commit Conventional
+
+## Action
+
+Use conventional commit format with prefixes: docs
+
+## Evidence
+
+- 3 commits analyzed
+- Detected conventional commit pattern
+- Examples: docs: align Claude guidance with native AWS workflow, docs: add repository agent execution rules
+
+---
+id: openshorts-commit-length
+trigger: "when writing a commit message"
+confidence: 0.6
+domain: git
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Commit Length
+
+## Action
+
+Keep commit messages concise (~48 characters)
+
+## Evidence
+
+- Average commit message length: 48 chars
+- Based on 3 commits
+
+---
+id: openshorts-naming-files
+trigger: "when creating a new file"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Naming Files
+
+## Action
+
+Use snake_case naming convention
+
+## Evidence
+
+- Analyzed file naming patterns in repository
+- Dominant pattern: snake_case
+
+---
+id: openshorts-import-relative
+trigger: "when importing modules"
+confidence: 0.75
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Import Relative
+
+## Action
+
+Use relative imports for project files
+
+## Evidence
+
+- Import analysis shows relative import pattern
+- Example: import { x } from '../lib/x'
+
+---
+id: openshorts-export-style
+trigger: "when exporting from a module"
+confidence: 0.7
+domain: code-style
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Export Style
+
+## Action
+
+Prefer named exports
+
+## Evidence
+
+- Export pattern analysis
+- Dominant style: named
+
+---
+id: openshorts-test-separate
+trigger: "when writing tests"
+confidence: 0.8
+domain: testing
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Test Separate
+
+## Action
+
+Place tests in the tests/ or __tests__/ directory, mirroring src structure
+
+## Evidence
+
+- Separate test directory pattern detected
+- Tests live in dedicated test folders
+
+---
+id: openshorts-workflow-update-documentation-file
+trigger: "when doing update documentation file"
+confidence: 0.65
+domain: workflow
+source: repo-analysis
+source_repo: https://github.com/adith92/openshorts
+---
+
+# Openshorts Workflow Update Documentation File
+
+## Action
+
+Follow the update-documentation-file workflow:
+1. Identify documentation that needs updating or creation.
+2. Edit or create the relevant markdown (.md) file(s) in the repository.
+3. Commit the changes with a 'docs:' prefix in the commit message.
+
+## Evidence
+
+- Workflow detected from commit patterns
+- Frequency: ~3x per month
+- Files: *.md, docs/*.md
+
+---
+id: openshorts-instinct-file-naming
+trigger: "When creating a new file in the codebase"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct File Naming
+
+## Action
+
+Name the file using snake_case convention
+
+## Evidence
+
+- Pattern in namingConventions.files: 'snake_case'
+
+---
+id: openshorts-instinct-function-naming
+trigger: "When defining a new function"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Function Naming
+
+## Action
+
+Use camelCase for function names
+
+## Evidence
+
+- Pattern in namingConventions.functions: 'camelCase'
+
+---
+id: openshorts-instinct-class-naming
+trigger: "When defining a new class"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Class Naming
+
+## Action
+
+Use PascalCase for class names
+
+## Evidence
+
+- Pattern in namingConventions.classes: 'PascalCase'
+
+---
+id: openshorts-instinct-constant-naming
+trigger: "When declaring a constant"
+confidence: 0.85
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Constant Naming
+
+## Action
+
+Use SCREAMING_SNAKE_CASE for constant names
+
+## Evidence
+
+- Pattern in namingConventions.constants: 'SCREAMING_SNAKE_CASE'
+
+---
+id: openshorts-instinct-import-style
+trigger: "When importing modules"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Import Style
+
+## Action
+
+Use relative import paths
+
+## Evidence
+
+- Pattern in importStyle: 'relative'
+
+---
+id: openshorts-instinct-export-style
+trigger: "When exporting modules or functions"
+confidence: 0.8
+domain: code-style
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Export Style
+
+## Action
+
+Use named exports
+
+## Evidence
+
+- Pattern in exportStyle: 'named'
+
+---
+id: openshorts-instinct-git-commit-prefix-docs
+trigger: "When committing documentation changes"
+confidence: 0.9
+domain: git
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Git Commit Prefix Docs
+
+## Action
+
+Prefix the commit message with 'docs:'
+
+## Evidence
+
+- Seen in commit: 'docs: align Claude guidance with native AWS workflow'
+- Pattern in commits.prefixes: ['docs']
+
+---
+id: openshorts-instinct-git-commit-format
+trigger: "When writing a commit message"
+confidence: 0.85
+domain: git
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Git Commit Format
+
+## Action
+
+Follow the conventional commit format: <type>: <description>
+
+## Evidence
+
+- Pattern in commits.type: 'conventional'
+- Examples: 'docs: add repository agent execution rules'
+
+---
+id: openshorts-instinct-update-documentation-file
+trigger: "When someone wants to update or add documentation about workflows, rules, or deployment processes"
+confidence: 0.95
+domain: workflow
+source: repo-analysis
+source_repo: adith92/openshorts
+---
+
+# Openshorts Instinct Update Documentation File
+
+## Action
+
+Edit or create the relevant markdown (.md) file(s) and commit with a 'docs:' prefix
+
+## Evidence
+
+- Workflow: update-documentation-file
+- Examples: 'docs: add Codex local audit and AWS deployment gate'
+
